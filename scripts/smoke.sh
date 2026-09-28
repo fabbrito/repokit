@@ -19,6 +19,7 @@ tag=${1-}
 	exit 2
 }
 
+src=$(cd "$(dirname "$0")/.." && pwd) || die 'cannot find the repo'
 dir=$(mktemp -d "${TMPDIR:-/tmp}/repokit-smoke.XXXXXX") || die 'mktemp failed'
 trap 'rm -rf "$dir"' EXIT
 export MISE_DATA_DIR=$dir/data MISE_CACHE_DIR=$dir/cache
@@ -27,7 +28,12 @@ export MISE_CONFIG_DIR=$dir/config MISE_STATE_DIR=$dir/state MISE_YES=1
 repo=$dir/repo
 git init -q "$repo" || die 'git init failed'
 cd "$repo" || die "cannot enter $repo"
-printf '[tools]\n"github:fabbrito/repokit" = "%s"\n' "${tag#v}" >mise.toml
+# The consumer's pin, from templates/base, at this tag's version: the smoke
+# proves the line people copy, not one written here.
+pin=$(grep '^"github:fabbrito/repokit"' "$src/templates/base/mise.toml") ||
+	die 'no repokit pin in templates/base/mise.toml'
+pin=$(sed -E 's/version = "[^"]*"/version = "'"${tag#v}"'"/' <<<"$pin")
+printf '[tools]\n%s\n' "$pin" >mise.toml
 mkdir -p .config
 printf 'schema = 2\ntypes = feat\n' >.config/commit-msg.conf
 
