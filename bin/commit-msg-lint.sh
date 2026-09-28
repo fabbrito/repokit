@@ -12,7 +12,7 @@
 # Exit: 0 ok, 1 rejected, 2 usage, config or a broken environment.
 set -uo pipefail
 
-VERSION='v0.1.0'
+VERSION='v0.1.1'
 SCHEMA=2
 
 prog=commit-msg-lint
