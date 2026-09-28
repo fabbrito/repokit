@@ -31,7 +31,7 @@ Needs mise. Copy `base`, then whichever others the repo needs, each file to wher
 | -------- | ------------------------- | -------------------------------------- | ------------------------------------- |
 | `base`   | lefthook, the grader      | `commit-msg-lint`, `lefthook validate` | `lefthook-rc.sh`, `make.mk` (`hooks`) |
 | `shell`  | shfmt, shellcheck         | shfmt, shellcheck                      | flags in `.shellcheckrc`              |
-| `dprint` | dprint                    | dprint: md, json, toml                 | a starter `dprint.json`               |
+| `dprint` | dprint                    | dprint: md, json, toml, yaml           | a starter `dprint.json`               |
 | `rust`   | — (`rust-toolchain.toml`) | cargo fmt, cargo check                 |                                       |
 | `ts`     | bun                       | oxfmt, oxlint, typecheck               | tools pinned by `bun.lock`            |
 
