@@ -152,12 +152,16 @@ make hooks      # once per clone
 make test       # the fixture harness
 make check      # every lane over the whole tree, read only
 make fmt        # the same lanes, writing
+make release    # VERSION=vX.Y.Z - stamp, gate, tag
+make publish    # push, cut the GitHub release, smoke-install it through mise
+make bump       # move templates/base's grader pin to the latest release
 ```
 
 This repo is its own first consumer, without copies: `lefthook.yml` extends `templates/`, the
 Makefile includes `templates/base/make.mk`, and `.config/` holds symlinks into `templates/`. The
-grader on `PATH` is the tree's own `bin/`, never the released one. Prettier is this repo's docs
-formatter and is not shipped.
+grader on `PATH` is the tree's own `bin/`, never the released one: every change is graded here
+before it ships. `make bump` after a publish moves the pin consumers copy. Prettier is this repo's
+docs formatter and is not shipped.
 
 Tests are plain bash: `tests/commit-msg/<name>.msg` next to `<name>.expect` holding the expected
 exit code, and cases in `tests/run.sh` that copy templates into throwaway repos and commit through

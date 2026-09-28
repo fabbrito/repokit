@@ -18,7 +18,9 @@ The grader grades messages and nothing else. It does not grow lanes.
 
 This repo is its own first consumer, without copies: `lefthook.yml` extends `templates/`, the
 Makefile includes `templates/base/make.mk`, `.config/` is symlinks into `templates/`. Never replace
-a symlink with a copy. The grader on `PATH` is `bin/`, via `mise.toml`'s `[env]`.
+a symlink with a copy. The grader on `PATH` is `bin/`, via `mise.toml`'s `[env]` — never the
+released one: make and the hooks must grade a change before it ships. `make bump` moves only
+`templates/base`'s pin.
 
 ## Errors are the product
 

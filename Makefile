@@ -6,7 +6,7 @@ include templates/base/make.mk
 # base.mk defines `hooks` first; `help` stays the default.
 .DEFAULT_GOAL := help
 
-.PHONY: help test check fmt release publish
+.PHONY: help test check fmt release publish bump
 
 define HELP_AWK
 BEGIN {
@@ -40,3 +40,8 @@ release: ## tag a release here, gated - VERSION=vX.Y.Z [DRY_RUN=1]
 
 publish: ## push the tag and cut the GitHub release - [DRY_RUN=1]
 	scripts/publish.sh $(if $(DRY_RUN),--dry-run)
+
+# After publish: templates/base pins the grader consumers install. This repo
+# never runs that pin - it grades with bin/.
+bump: ## pin templates/base to the latest published grader [DRY_RUN=1]
+	scripts/bump.sh $(if $(DRY_RUN),--dry-run)
