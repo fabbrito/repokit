@@ -40,6 +40,7 @@ tag=$(git describe --tags --exact-match HEAD 2>/dev/null) ||
 [[ $tag =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || die "$tag is not a release tag"
 [[ $(git branch --show-current) == master ]] || refuse 'not on master'
 [[ -z $(git status --porcelain) ]] || refuse 'tree not clean'
+[[ $(<VERSION) == "$tag" ]] || refuse "VERSION is not stamped $tag"
 grep -q "^VERSION='$tag'\$" bin/commit-msg-lint.sh ||
 	refuse "the grader is not stamped $tag"
 command -v gh >/dev/null 2>&1 || refuse 'gh not found'

@@ -225,6 +225,18 @@ case_no_conf() {
 	want_in 'grader/no conf names the path' '.config/commit-msg.conf' "$out"
 }
 
+# VERSION is the repo's record; the grader ships alone and carries its own
+# copy. A release stamps both - between releases they must still agree.
+case_version_agrees() {
+	local out
+	mkrepo <<-'CONF' || return
+		schema = 2
+	CONF
+	out=$(in_repo version)
+	want_in 'version/the grader says what VERSION says' \
+		"commit-msg-lint $(<"$src/VERSION") " "$out"
+}
+
 case_cli_surface() {
 	local out
 	mkrepo <<-'CONF' || return
@@ -538,6 +550,7 @@ cases=(
 	case_relative_path_from_a_subdir
 	case_outside_a_repo
 	case_no_conf
+	case_version_agrees
 	case_cli_surface
 	case_conf_unknown_key
 	case_conf_bad_value

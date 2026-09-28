@@ -4,7 +4,7 @@
 # the machine - `make publish` does that.
 #   make release VERSION=v1.0.0 [DRY_RUN=1]
 #
-# The version is stamped into the grader, so a consumer that runs
+# The version is stamped into VERSION and the grader, so a consumer that runs
 # `commit-msg-lint version` gets the tag its mise pin names. Between
 # releases the tree carries the last one: the tag is the truth, the constant
 # is a convenience.
@@ -69,19 +69,22 @@ if $dry; then
 fi
 
 # Stamp before the gate, so a release is proven with exactly the bytes that
-# ship.
+# ship. VERSION is the repo's record of the release; the grader carries its
+# own copy because it ships alone, as the release asset.
 grader=bin/commit-msg-lint.sh
+printf '%s\n' "$tag" >VERSION || die 'cannot stamp VERSION'
 sed -i "s/^VERSION=.*/VERSION='$tag'/" "$grader" ||
 	die "cannot stamp $grader"
 
-grep -q "^VERSION='$tag'\$" "$grader" || die 'stamp did not take'
+[[ $(<VERSION) == "$tag" ]] || die 'VERSION stamp did not take'
+grep -q "^VERSION='$tag'\$" "$grader" || die 'grader stamp did not take'
 
 if ! make test check; then
-	git checkout -- "$grader"
+	git checkout -- VERSION "$grader"
 	die 'gate failed - nothing committed'
 fi
 
-git add "$grader" || die 'cannot stage the stamp'
+git add VERSION "$grader" || die 'cannot stage the stamp'
 git commit -qm "$subject" || die 'commit failed'
 git tag -a "$tag" -m "$tag" || die 'tag failed'
 
