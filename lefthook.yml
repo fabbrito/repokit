@@ -1,0 +1,43 @@
+# repokit's own hooks: templates/ extended in place, not copied, so every
+# commit here runs what it ships.
+extends:
+  - templates/base/lefthook.yml
+  - templates/shell/lefthook.yml
+
+# Prettier is local to this repo, not shipped. The config job checks the
+# whole tree and only checks on commit: stage_fixed re-stages staged paths
+# only. The pattern is quoted: prettier expands it, not sh.
+pre-commit:
+  jobs:
+    - name: prettier
+      glob: &docs ["**/*.md", "**/*.json", "**/*.yml", "**/*.yaml"]
+      file_types: &file [not symlink]
+      run: prettier --write {staged_files}
+      stage_fixed: true
+    - name: prettier-config
+      glob: &config [".prettierrc.json", ".prettierignore"]
+      run: prettier --check '**/*.{md,json,yml,yaml}'
+
+check:
+  jobs:
+    - name: prettier
+      glob: *docs
+      file_types: *file
+      files: &changed "sh -c 'git diff --name-only --diff-filter=ACMR HEAD 2>/dev/null || git diff --cached --name-only --diff-filter=ACMR; git ls-files --others --exclude-standard'"
+      run: prettier --check {files}
+    - name: prettier-config
+      glob: *config
+      files: *changed
+      run: prettier --check '**/*.{md,json,yml,yaml}'
+
+fix:
+  jobs:
+    - name: prettier
+      glob: *docs
+      file_types: *file
+      files: *changed
+      run: prettier --write {files}
+    - name: prettier-config
+      glob: *config
+      files: *changed
+      run: prettier --write '**/*.{md,json,yml,yaml}'

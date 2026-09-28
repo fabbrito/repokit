@@ -1,0 +1,14 @@
+# repokit's own tools. The shell template's pins arrive through
+# .config/mise/conf.d/shell.toml, a symlink into templates/ - this repo runs
+# the bytes it ships. The grader is the tree's own, on PATH from bin/, never
+# the released one: templates/base pins that for consumers.
+[tools]
+lefthook = "2.1.14"
+# Prettier is this repo's docs formatter, not a template: it stays here.
+node = "24.21.0"
+"npm:prettier" = "3.9.8"
+# The harness reads lefthook dump with it.
+jq = "1.8.2"
+
+[env]
+_.path = ["{{config_root}}/bin"]

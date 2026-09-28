@@ -1,0 +1,1 @@
+../templates/base/lefthook-rc.sh
