@@ -3,7 +3,7 @@
 # not copied.
 include templates/base/make.mk
 
-# base.mk defines `hooks` first; `help` stays the default.
+# base.mk defines `deps` first; `help` stays the default.
 .DEFAULT_GOAL := help
 
 .PHONY: help test check fmt release publish bump

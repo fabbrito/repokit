@@ -411,6 +411,25 @@ case_base_rc_refuses_without_mise() {
 	want_in 'base/no mise says what to install' 'mise not on PATH' "$out"
 }
 
+# A repo appends its own deps as another `deps::`: base's tools install
+# first, and `hooks` installs none. -n: the recipes, not a real install.
+case_base_make_deps_extends() {
+	local out
+	mkconsumer || return
+	mkdir -p "$repo/.config/make"
+	cp "$src/templates/base/make.mk" "$repo/.config/make/base.mk"
+	printf 'include .config/make/base.mk\ndeps::\n\techo repo-deps\n' \
+		>"$repo/Makefile"
+
+	out=$(make -C "$repo" -n --no-print-directory deps 2>&1)
+	want_exit 'base/deps extends without a make error' 0 $?
+	want_in 'base/deps installs the tools, then the repo' \
+		$'mise install\necho repo-deps' "$out"
+
+	out=$(make -C "$repo" -n --no-print-directory hooks 2>&1)
+	want_not_in 'base/hooks installs no tools' 'mise install' "$out"
+}
+
 # shell's policy: a formatter writes on commit and re-stages.
 case_shell_formats_and_restages() {
 	mkconsumer shell || return
@@ -561,6 +580,7 @@ cases=(
 	case_base_grades_the_message
 	case_base_validate_refuses_a_typo
 	case_base_rc_refuses_without_mise
+	case_base_make_deps_extends
 	case_shell_formats_and_restages
 	case_shell_shellcheck_refuses
 	case_shell_symlink_skipped

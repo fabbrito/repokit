@@ -27,13 +27,13 @@ the shape:
 
 Needs mise. Copy `base`, then whichever others the repo needs, each file to where its header says:
 
-| Template | mise                      | lefthook                               | Also                                  |
-| -------- | ------------------------- | -------------------------------------- | ------------------------------------- |
-| `base`   | lefthook, the grader      | `commit-msg-lint`, `lefthook validate` | `lefthook-rc.sh`, `make.mk` (`hooks`) |
-| `shell`  | shfmt, shellcheck         | shfmt, shellcheck                      | flags in `.shellcheckrc`              |
-| `dprint` | dprint                    | dprint: md, json, toml, yaml           | a starter `dprint.json`               |
-| `rust`   | — (`rust-toolchain.toml`) | cargo fmt, cargo check                 |                                       |
-| `ts`     | bun                       | oxfmt, oxlint, typecheck               | tools pinned by `bun.lock`            |
+| Template | mise                      | lefthook                               | Also                                          |
+| -------- | ------------------------- | -------------------------------------- | --------------------------------------------- |
+| `base`   | lefthook, the grader      | `commit-msg-lint`, `lefthook validate` | `lefthook-rc.sh`, `make.mk` (`deps`, `hooks`) |
+| `shell`  | shfmt, shellcheck         | shfmt, shellcheck                      | flags in `.shellcheckrc`                      |
+| `dprint` | dprint                    | dprint: md, json, toml, yaml           | a starter `dprint.json`                       |
+| `rust`   | — (`rust-toolchain.toml`) | cargo fmt, cargo check                 |                                               |
+| `ts`     | bun                       | oxfmt, oxlint, typecheck               | tools pinned by `bun.lock`                    |
 
 ```
 templates/<t>/mise.toml     → .config/mise/conf.d/<t>.toml
@@ -56,14 +56,20 @@ extends:
 ```make
 # Makefile - first line
 include .config/make/base.mk
-.DEFAULT_GOAL := help # base.mk defines `hooks` first
+.DEFAULT_GOAL := help # base.mk defines `deps` first
 
 check: ## the commit gate - run before committing
 	lefthook run check
 ```
 
-`make hooks` once per clone: `mise install`, then `lefthook install`. Bumping the grader is a
-version in `.config/mise/conf.d/base.toml` and `make hooks` again.
+`make deps` installs the pinned tools (`mise install`); `make hooks`, once per clone, only the git
+hooks. Bumping the grader is a version in `.config/mise/conf.d/base.toml` and `make deps` again. A
+repo with more to install appends it as its own `deps::`, run after base's:
+
+```make
+deps::
+	mise exec -- bun install # mise exec: PATH was read before mise install
+```
 
 ## Hooks
 
@@ -148,6 +154,7 @@ secret scan — is a local job calling a script. The grader does not grow lanes.
 
 ```bash
 make            # the targets
+make deps       # pinned tools; again after a bump
 make hooks      # once per clone
 make test       # the fixture harness
 make check      # every lane over the whole tree, read only
