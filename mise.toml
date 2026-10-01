@@ -3,10 +3,10 @@
 # the bytes it ships. The grader is the tree's own, on PATH from bin/, never
 # the released one: templates/base pins that for consumers.
 [tools]
-lefthook = "2.1.14"
+lefthook = "2.1.15"
 # Prettier is this repo's docs formatter, not a template: it stays here.
-node = "24.21.0"
-"npm:prettier" = "3.9.8"
+node = "26.10.0"
+"npm:prettier" = "3.9.9"
 # The harness reads lefthook dump with it.
 jq = "1.8.2"
 
