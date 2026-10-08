@@ -6,10 +6,10 @@
 #   tests/commit-msg/<name>.msg + <name>.expect   expected exit code
 #   case_*                                        throwaway repos, built here
 #
-# lefthook's mechanics are lefthook's to test - stashing, chunking, globbing.
-# These cases prove only what is ours: the body-bullets rule, and the templates - which
-# job runs in which hook, which writes, which stages, the file set `check`
-# and `fix` compute - copied into a throwaway repo the way a consumer would.
+# lefthook's and commitlint's mechanics are theirs to test. These cases prove
+# only what is ours: the body-bullets rule, and the templates - which job runs
+# in which hook, which writes, which stages, the file set `check` and `fix`
+# compute - copied into a throwaway repo the way a consumer would.
 #
 # No errexit: a failing case is the point, not a reason to stop.
 set -uo pipefail

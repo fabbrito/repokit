@@ -60,8 +60,8 @@ goes through the rule it ships.
 - Every commit lands green: lefthook's `pre-commit` runs the templates over the staged set.
   `make check` runs the same lanes over the whole tree. Never bare `lefthook run` — `make` or
   `mise exec --`.
-- `type(scope): subject`, scope from `.config/commitlint.config.mjs`. The hook owns the shape and
-  prints it on reject — do not restate it here.
+- `type(scope): subject`, scope from `.config/commitlint.config.mjs`. The hook owns the shape — do
+  not restate it here.
 - AI co-authored: `Co-Authored-By:` naming the model. Never a session link.
 
 ## Scope
