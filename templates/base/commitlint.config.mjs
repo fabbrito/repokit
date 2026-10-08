@@ -46,13 +46,11 @@ export const bodyBullets = ({ raw }, _when, max = 2) => {
   const flush = () => {
     if (run?.prose) {
       errs.push(
-        `body is prose, not bullets (lines ${run.from}-${run.to})\n` +
-          `  write: - ${run.text}`,
+        `body is prose, not bullets (lines ${run.from}-${run.to})\n  write: - ${run.text}`,
       );
     } else if (run && run.to > run.from) {
       errs.push(
-        `bullet wraps across lines ${run.from}-${run.to}\n` +
-          '  write: one bullet per line - cut it, or split it into two',
+        `bullet wraps across lines ${run.from}-${run.to}\n  write: one bullet per line - cut it, or split it into two`,
       );
     }
     run = null;
@@ -76,8 +74,7 @@ export const bodyBullets = ({ raw }, _when, max = 2) => {
     } else if (reTrailer.test(line)) {
       flush();
       errs.push(
-        `line ${at} is a trailer inside the body\n` +
-          '  write: every trailer in one block at the end, no blank between',
+        `line ${at} is a trailer inside the body\n  write: every trailer in one block at the end, no blank between`,
       );
     } else {
       flush();
