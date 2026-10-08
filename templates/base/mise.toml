@@ -3,6 +3,6 @@
 # `make deps`.
 [tools]
 lefthook = "2.1.14"
-# The grader is one bare, platform-free file: without asset_pattern, mise's
-# platform matching finds no linux-x64 asset and refuses it.
-"github:fabbrito/repokit" = { version = "0.1.1", asset_pattern = "commit-msg-lint" }
+# commitlint and the config-conventional it bundles: no package.json needed.
+node = "26.10.0"
+"npm:@commitlint/cli" = "21.2.3"
