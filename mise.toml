@@ -3,8 +3,8 @@
 # wins over a template's.
 [tools]
 lefthook = "2.1.17"
-# Prettier is this repo's docs formatter, not a template: it stays here.
-node = "26.11.1"
+# Prettier is this repo's docs formatter, not a template: it stays here. Its
+# node is base's.
 "npm:prettier" = "3.9.9"
 # The harness reads lefthook dump with it.
 jq = "1.8.2"
