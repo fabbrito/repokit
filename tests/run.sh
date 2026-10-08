@@ -6,10 +6,10 @@
 #   tests/commit-msg/<name>.msg + <name>.expect   expected exit code
 #   case_*                                        throwaway repos, built here
 #
-# lefthook's mechanics are lefthook's to test - stashing, chunking, globbing.
-# These cases prove only what is ours: the grader, and the templates - which
-# job runs in which hook, which writes, which stages, the file set `check`
-# and `fix` compute - copied into a throwaway repo the way a consumer would.
+# lefthook's and commitlint's mechanics are theirs to test. These cases prove
+# only what is ours: the body-bullets rule, and the templates - which job runs
+# in which hook, which writes, which stages, the file set `check` and `fix`
+# compute - copied into a throwaway repo the way a consumer would.
 #
 # No errexit: a failing case is the point, not a reason to stop.
 set -uo pipefail
@@ -21,7 +21,6 @@ cd "$(dirname "$0")/.." || exit 1
 unset GIT_DIR GIT_INDEX_FILE GIT_WORK_TREE GIT_PREFIX GIT_NAMESPACE
 unset GIT_OBJECT_DIRECTORY GIT_ALTERNATE_OBJECT_DIRECTORIES GIT_COMMON_DIR
 
-grader=$PWD/bin/commit-msg-lint.sh
 src=$PWD
 tmproot=$(mktemp -d) || exit 1
 trap 'rm -rf "$tmproot"' EXIT
@@ -85,9 +84,8 @@ want_not_in() {
 
 # ------------------------------------------------------------- commit-msg
 
-# Grading is pure text in, exit code out - but the grader locates its conf
-# with `rev-parse --show-toplevel` and skips a message mid-rebase, so it must
-# run inside a repo. Its own, never this one: a rebase in progress here would
+# Grading is text in, exit code out - but the rebase check asks git, so it
+# runs inside a repo. Its own, never this one: a rebase in progress here would
 # otherwise pass every fixture.
 fixture_repo=''
 repo=''
@@ -99,13 +97,13 @@ make_fixture_repo() {
 	cp -r tests/commit-msg "$fixture_repo/tests/commit-msg"
 }
 
-# grade <name> [VAR=value ...]
+# grade <name>: the fixture under tests/commit-msg's config. That config
+# imports templates/base's, so it runs from $src; its scope roots resolve
+# against the fixture repo it stands in.
 grade() {
-	local name=$1
-	shift
 	(cd "$fixture_repo" &&
-		COMMIT_MSG_CONF=$fixture_repo/tests/commit-msg/commit-msg.conf \
-			env "$@" "$grader" "tests/commit-msg/$name.msg" 2>&1)
+		commitlint --strict -g "$src/tests/commit-msg/commitlint.config.mjs" \
+			--edit "$fixture_repo/tests/commit-msg/$1.msg" 2>&1)
 }
 
 run_commit_msg() {
@@ -117,40 +115,38 @@ run_commit_msg() {
 		out=$(grade "$name")
 		got=$?
 		want_exit "commit-msg/$name" "$want" "$got"
-		# A rejection may speak; a pass must not. A stray `note` on the success
-		# path would otherwise hit every commit with nothing to catch it.
+		# A rejection may speak; a pass must not.
 		if ((want == 0)); then
 			[[ -z $out ]] || no "commit-msg/$name passes silently" "$out"
 		fi
 	done
 }
 
-# Rejections must say what to write, not just what is wrong.
+# body-bullets is ours: its rejections say what to write, not just what is
+# wrong.
 run_commit_msg_output() {
 	local out
 	out=$(grade bad-scope)
 	want_in 'commit-msg/bad-scope names the scopes' 'alpha' "$out"
 
-	out=$(grade bad-period)
-	want_not_in 'commit-msg/bad-period stays quiet about scopes' \
-		'scopes:' "$out"
-
 	# Wrapped prose is one rejection, not one per line.
 	out=$(grade bad-prose-body)
 	want_in 'commit-msg/bad-prose-body names the run' \
 		'body is prose, not bullets (lines 3-5)' "$out"
-	want_not_in 'commit-msg/bad-prose-body rejects once' \
-		'is not a bullet' "$out"
+	want_in 'commit-msg/bad-prose-body writes it as a bullet' \
+		'write: - the hook rejected' "$out"
 
 	# A wrapped bullet names the bullet and the wrap, so the fix is not
 	# "prefix a dash" - which the next pass would reject as a third bullet.
 	out=$(grade bad-wrapped-bullet)
 	want_in 'commit-msg/bad-wrapped-bullet names the wrap' \
 		'bullet wraps across lines 3-4' "$out"
-	want_in 'commit-msg/bad-wrapped-bullet says one bullet per line' \
-		'one bullet per line' "$out"
 	want_not_in 'commit-msg/bad-wrapped-bullet does not suggest a dash' \
 		'write: -' "$out"
+
+	out=$(grade bad-blank-between-trailers)
+	want_in 'commit-msg/a stray trailer says where trailers go' \
+		'one block at the end' "$out"
 
 	# A rebase replays messages it did not author.
 	mkdir -p "$fixture_repo/.git/rebase-merge"
@@ -159,193 +155,19 @@ run_commit_msg_output() {
 	rmdir "$fixture_repo/.git/rebase-merge"
 }
 
-# ------------------------------------------------------------------ grader
-
-# A throwaway repo in $repo, its conf read from stdin into the default path.
-# Not a command substitution: a heredoc inside $( ) has its body outside it,
-# which bash warns about and then guesses at.
-mkrepo() {
-	repo=$(mktemp -d -p "$tmproot") || return 1
-	git -C "$repo" init -q
-	git -C "$repo" config user.email 'test@example.com'
-	git -C "$repo" config user.name 'test'
-	mkdir -p "$repo/.config"
-	cat >"$repo/.config/commit-msg.conf"
-}
-
-# Run the grader inside the current fixture repo, stderr folded in.
-in_repo() {
-	(cd "$repo" && "$grader" "$@" 2>&1)
-}
-
-case_grades_stdin() {
-	local out
-	mkrepo <<-'CONF' || return
-		schema = 2
-		types  = feat
-	CONF
-	out=$(printf 'nope\n' | in_repo -)
-	want_exit 'grader/grades a message on stdin' 1 $?
-	want_in 'grader/stdin rejection says the shape' 'the shape' "$out"
-
-	printf 'feat: a\n' | in_repo - >/dev/null
-	want_exit 'grader/a good message on stdin passes' 0 $?
-}
-
-# The path is the caller's: relative to where it stands, not to the root the
-# grader moves to for the conf.
-case_relative_path_from_a_subdir() {
-	local out
-	mkrepo <<-'CONF' || return
-		schema = 2
-		types  = feat
-	CONF
-	mkdir -p "$repo/deep"
-	printf 'nope\n' >"$repo/deep/m"
-	out=$(cd "$repo/deep" && "$grader" m 2>&1)
-	want_exit 'grader/a relative path from a subdir is graded' 1 $?
-	want_not_in 'grader/a relative path resolves' 'no such message file' "$out"
-}
-
-case_outside_a_repo() {
-	local dir out
-	dir=$(mktemp -d -p "$tmproot") || return
-	printf 'feat: a\n' >"$dir/m"
-	out=$(cd "$dir" && "$grader" m 2>&1)
-	want_exit 'grader/outside a repo exits 2' 2 $?
-	want_in 'grader/outside a repo says so' 'not inside a git repository' "$out"
-}
-
-case_no_conf() {
-	local out
-	mkrepo </dev/null || return
-	rm "$repo/.config/commit-msg.conf"
-	out=$(printf 'feat: a\n' | in_repo -)
-	want_exit 'grader/no conf exits 2' 2 $?
-	want_in 'grader/no conf names the path' '.config/commit-msg.conf' "$out"
-}
-
-# VERSION is the repo's record; the grader ships alone and carries its own
-# copy. A release stamps both - between releases they must still agree.
-case_version_agrees() {
-	local out
-	mkrepo <<-'CONF' || return
-		schema = 2
-	CONF
-	out=$(in_repo version)
-	want_in 'version/the grader says what VERSION says' \
-		"commit-msg-lint $(<"$src/VERSION") " "$out"
-}
-
-case_cli_surface() {
-	local out
-	mkrepo <<-'CONF' || return
-		schema = 2
-	CONF
-	out=$(in_repo version)
-	want_exit 'cli/version exits 0' 0 $?
-	want_in 'cli/version names the schema' 'schema 2' "$out"
-
-	in_repo >/dev/null
-	want_exit 'cli/no arguments exits 2' 2 $?
-
-	in_repo a b >/dev/null
-	want_exit 'cli/two arguments exits 2' 2 $?
-
-	out=$(in_repo nope.msg)
-	want_exit 'cli/a missing file exits 2' 2 $?
-	want_in 'cli/a missing file is named' 'no such message file' "$out"
-}
-
-# ------------------------------------------------------------------ config
-
-case_conf_unknown_key() {
-	local out
-	mkrepo <<-'CONF' || return
-		schema = 2
-		subjet_max = 72
-	CONF
-	out=$(printf 'feat: a\n' | in_repo -)
-	want_exit 'conf/unknown key exits 2' 2 $?
-	want_in 'conf/unknown key names the key' 'subjet_max' "$out"
-}
-
-case_conf_bad_value() {
-	mkrepo <<-'CONF' || return
-		schema      = 2
-		subject_max = wide
-	CONF
-	printf 'feat: a\n' | in_repo - >/dev/null
-	want_exit 'conf/bad value exits 2' 2 $?
-}
-
-case_conf_unknown_schema() {
-	local out
-	mkrepo <<-'CONF' || return
-		schema = 99
-	CONF
-	out=$(printf 'feat: a\n' | in_repo -)
-	want_exit 'conf/unknown schema exits 2' 2 $?
-	want_in 'conf/a newer schema says the grader is stale' \
-		'grader is stale' "$out"
-}
-
-# Schema 1 carried lanes. Absent means 1, so an unmigrated conf lands here
-# and must say where the lanes went.
-case_conf_schema_one() {
-	local out
-	mkrepo <<-'CONF' || return
-		types = feat
-	CONF
-	out=$(printf 'feat: a\n' | in_repo -)
-	want_exit 'conf/schema 1 exits 2' 2 $?
-	want_in 'conf/schema 1 says where lanes went' 'lefthook.yml' "$out"
-	want_in 'conf/schema 1 says what to write' 'schema = 2' "$out"
-}
-
-case_conf_group_section() {
-	local out
-	mkrepo <<-'CONF' || return
-		schema = 2
-
-		[group shell]
-		run = shfmt -d
-	CONF
-	out=$(printf 'feat: a\n' | in_repo -)
-	want_exit 'conf/a [group] section exits 2' 2 $?
-	want_in 'conf/a [group] section says where lanes went' \
-		'lanes moved to lefthook.yml' "$out"
-}
-
-# A second `types` replaced the first and the policy narrowed - the one
-# config typo nothing downstream can catch.
-case_conf_duplicate_key() {
-	local out
-	mkrepo <<-'CONF' || return
-		schema = 2
-		types  = feat
-		types  = fix
-	CONF
-	out=$(printf 'feat: a\n' | in_repo -)
-	want_exit 'conf/a duplicate key exits 2' 2 $?
-	want_in 'conf/a duplicate key names both lines' 'first at line 2' "$out"
-	want_in 'conf/a duplicate key says what to write' \
-		'write one types line' "$out"
-}
-
 # --------------------------------------------------------------- templates
 
-# A consumer repo in $repo: conf, the named templates copied where the README
+# A consumer repo in $repo: the named templates copied where the README
 # says, a lefthook.yml extending them, hooks installed. base always, and
 # first. The rc guard is left out - it needs mise, and gets its own case.
 mkconsumer() {
 	local t list=''
-	mkrepo <<-'CONF' || return 1
-		schema      = 2
-		types       = feat fix
-		scope_fixed = app
-	CONF
+	repo=$(mktemp -d -p "$tmproot") || return 1
+	git -C "$repo" init -q
+	git -C "$repo" config user.email 'test@example.com'
+	git -C "$repo" config user.name 'test'
 	mkdir -p "$repo/.config/lefthook"
+	cp "$src/templates/base/commitlint.config.mjs" "$repo/.config/" || return 1
 	for t in base "$@"; do
 		[[ $t == base && -n $list ]] && continue
 		cp "$src/templates/$t/lefthook.yml" "$repo/.config/lefthook/$t.yml" ||
@@ -370,7 +192,7 @@ unformatted='#!/bin/bash\nif true;then echo hi;fi\n'
 formatted='#!/bin/bash
 if true; then echo hi; fi'
 
-# base calls the grader by name, from PATH, and hands it the message.
+# base calls commitlint from PATH, with the copied config, on the message.
 case_base_grades_the_message() {
 	local out
 	mkconsumer || return
@@ -379,9 +201,9 @@ case_base_grades_the_message() {
 
 	out=$(commit 'nope')
 	want_exit 'base/a bad message is refused' 1 $?
-	want_in 'base/the refusal is the grader' 'commit-msg-lint: subject' "$out"
+	want_in 'base/the refusal is commitlint' '[type-empty]' "$out"
 
-	commit 'feat(app): add a' >/dev/null
+	commit 'feat(repo): add a' >/dev/null
 	want_exit 'base/a good message commits' 0 $?
 }
 
@@ -550,12 +372,9 @@ case_templates_keep_the_split() {
 
 # Mandatory, not skipped: a harness that goes quiet without its tools proves
 # nothing, and says so least when it matters.
-for tool in lefthook shfmt shellcheck jq; do
+for tool in lefthook commitlint shfmt shellcheck jq; do
 	command -v "$tool" >/dev/null 2>&1 || no "harness/$tool not found"
 done
-
-# Consumers find the grader on PATH, as mise puts it there. The tree's own.
-PATH=$src/bin:$PATH
 
 make_fixture_repo || exit 1
 run_commit_msg
@@ -565,18 +384,6 @@ run_commit_msg_output
 # not run, and a test that does not run is the failure this harness exists to
 # catch - so the guard below fails the run rather than staying quiet.
 cases=(
-	case_grades_stdin
-	case_relative_path_from_a_subdir
-	case_outside_a_repo
-	case_no_conf
-	case_version_agrees
-	case_cli_surface
-	case_conf_unknown_key
-	case_conf_bad_value
-	case_conf_unknown_schema
-	case_conf_schema_one
-	case_conf_group_section
-	case_conf_duplicate_key
 	case_base_grades_the_message
 	case_base_validate_refuses_a_typo
 	case_base_rc_refuses_without_mise

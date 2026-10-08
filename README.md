@@ -1,46 +1,38 @@
 # repokit
 
-Templates a repo copies — tool pins, git hooks, make targets — and one versioned tool,
-`commit-msg-lint`, the commit-message grader they call. Tools are [mise](https://mise.jdx.dev)'s,
-hooks are [lefthook](https://lefthook.dev)'s. A template is copied, then owned: nothing ties the
-copy back here.
+Templates a repo copies — tool pins, git hooks, make targets. Tools are
+[mise](https://mise.jdx.dev)'s, hooks are [lefthook](https://lefthook.dev)'s, commit messages are
+[commitlint](https://commitlint.js.org)'s. A template is copied, then owned: nothing ties the copy
+back here.
 
-Every rejection says what is wrong **and what to write instead**: the committer is usually an agent,
-and prose rules in `AGENTS.md` drift while a tool that rejects does not.
+The committer is usually an agent, and prose rules in `AGENTS.md` drift while a hook that rejects
+does not. The one rule commitlint lacks, `body-bullets`, says what is wrong **and what to write
+instead**:
 
 ```
-$ git commit -m 'Add the dispatcher.'
-commit-msg-lint: subject is not type(scope): subject
-  got:   Add the dispatcher.
-  write: feat(hooks): add the dispatcher
-
-the shape:
-  type(scope): subject
-
-  - bullet
-  Trailer: value
-
-  types: feat fix refactor chore style docs build perf
+$ git commit -F msg
+✖   body is prose, not bullets (lines 3-4)
+  write: - the hook rejected every wrapped line of this paragraph [body-bullets]
 ```
 
 ## Use it
 
 Needs mise. Copy `base`, then whichever others the repo needs, each file to where its header says:
 
-| Template | mise                      | lefthook                               | Also                                          |
-| -------- | ------------------------- | -------------------------------------- | --------------------------------------------- |
-| `base`   | lefthook, the grader      | `commit-msg-lint`, `lefthook validate` | `lefthook-rc.sh`, `make.mk` (`deps`, `hooks`) |
-| `shell`  | shfmt, shellcheck         | shfmt, shellcheck                      | flags in `.shellcheckrc`                      |
-| `dprint` | dprint                    | dprint: md, json, toml, yaml           | a starter `dprint.json`                       |
-| `rust`   | — (`rust-toolchain.toml`) | cargo fmt, cargo check                 |                                               |
-| `ts`     | bun                       | oxfmt, oxlint, typecheck               | tools pinned by `bun.lock`                    |
+| Template | mise                       | lefthook                          | Also                                                                   |
+| -------- | -------------------------- | --------------------------------- | ---------------------------------------------------------------------- |
+| `base`   | lefthook, node, commitlint | `commitlint`, `lefthook validate` | `commitlint.config.mjs`, `lefthook-rc.sh`, `make.mk` (`deps`, `hooks`) |
+| `shell`  | shfmt, shellcheck          | shfmt, shellcheck                 | flags in `.shellcheckrc`                                               |
+| `dprint` | dprint                     | dprint: md, json, toml, yaml      | a starter `dprint.json`                                                |
+| `rust`   | — (`rust-toolchain.toml`)  | cargo fmt, cargo check            |                                                                        |
+| `ts`     | bun                        | oxfmt, oxlint, typecheck          | tools pinned by `bun.lock`                                             |
 
 ```
 templates/<t>/mise.toml     → .config/mise/conf.d/<t>.toml
 templates/<t>/lefthook.yml  → .config/lefthook/<t>.yml
 templates/base/lefthook-rc.sh → .config/lefthook-rc.sh
 templates/base/make.mk      → .config/make/base.mk
-commit-msg.conf.example     → .config/commit-msg.conf
+templates/base/commitlint.config.mjs → .config/commitlint.config.mjs
 ```
 
 Then:
@@ -63,8 +55,8 @@ check: ## the commit gate - run before committing
 ```
 
 `make deps` installs the pinned tools (`mise install`); `make hooks`, once per clone, only the git
-hooks. Bumping the grader is a version in `.config/mise/conf.d/base.toml` and `make deps` again. A
-repo with more to install appends it as its own `deps::`, run after base's:
+hooks. Bumping a tool is a version in `.config/mise/conf.d/<t>.toml` and `make deps` again. A repo
+with more to install appends it as its own `deps::`, run after base's:
 
 ```make
 deps::
@@ -94,61 +86,39 @@ whole-tree gate.
 - Partially staged files are safe: lefthook hides the unstaged half while jobs run.
 - `LEFTHOOK=0` skips every hook. `lefthook run commit-msg <file>` grades a message by hand.
 
-## The grader
-
-`commit-msg-lint <file>|-` grades a message; `-` reads stdin. `commit-msg-lint version` prints its
-version and schema. It reads `.config/commit-msg.conf` from the repo root, or `COMMIT_MSG_CONF`.
-
-Exit: `0` ok, `1` rejected, `2` usage, config, or a broken environment, including git itself
-failing. `2` is distinct on purpose: none of those judged your commit, and a `1` invites
-`--no-verify` when the real problem is the machine.
-
 ## Message rules
 
-`type(scope): subject`, then an optional body, then optional trailers.
+`.config/commitlint.config.mjs` extends `@commitlint/config-conventional`, which the CLI bundles: no
+`package.json`. Its top is the repo's policy — `scope-enum` (fixed names plus `dirs('<root>')`, a
+scope per directory), `type-enum`, the limits — then the one local rule:
 
-- **Subject** — `type` from `types`; `scope`, when present, from the allowlist; the text
-  lowercase-first with no trailing period; the whole line at most `subject_max`.
-- **Body** — one blank line, then `- ` bullets and nothing else: at most `bullet_max` of them, each
-  one line of at most `body_cols`. A wrapped line is not a bullet, it is the bullet above it. One
-  more blank line before the trailer block is allowed: that is what git itself writes.
-- **Trailers** — the allowlist is `trailer_person` plus `trailer_reference`, and nothing else.
-  Person keys take `Name <email>`, reference keys take one token. Once a trailer appears, only
-  trailers may follow.
-- **Scopes** — `scope_fixed`, plus the basename of every directory a `scope_root` glob finds. The
-  full list prints only when the rejection is an unknown scope.
+- **`body-bullets`** — one blank line under the subject, then `- ` bullets and nothing else, back to
+  back, one line each, at most its option (default 2). A trailer block may close the message, one
+  blank line before it allowed: what git itself writes.
+
+Every rule is an error or off: the hook runs `--strict`, which fails a warning too. Exit `0` ok, `3`
+rejected, `1` commitlint itself failed (a broken config), `9` the config is missing.
 
 Not graded: anything git wrote (`Merge `, `Revert `, `fixup!`, `squash!`, `amend!`), and **every
-message during a rebase** — a rebase replays messages it did not author, and failing them would make
-this tool the reason you cannot rebase.
+message during a rebase** — a rebase replays messages it did not author.
 
-## Config
+### From `commit-msg-lint`
 
-`commit-msg.conf.example` is the schema document: every key, its default, and what it does. It is
-parsed on every message, so a typo is exit 2 — an unknown key, a second line for a key that does not
-accumulate, a bad number, each naming the line.
+The grader's releases stay up: a repo pinned to one keeps working until it moves. To move:
 
-`schema = 2` is the one cross-version guarantee. Absent means 1, the githooks format that carried
-`[group]` lanes; those belong in `lefthook.yml` now, and the grader says so. A schema the grader
-does not know is exit 2, naming both numbers and which side is stale.
-
-## Versioning
-
-Only the grader is versioned; a template is a copy. Three questions, in order — the first `yes` is
-the bump:
-
-- **Major** — must a consumer edit a file? A `commit-msg.conf` that parsed no longer parses, a
-  command renamed or removed, an exit code that changes meaning.
-- **Minor** — can a repo that was green go red with no edit? A new rejection, a widened one.
-- **Patch** — neither.
-
-Pre-1.0 the major row is empty: its cases land as a minor. `1.0.0` when the feature set is stable.
+- `base.toml`: the `github:fabbrito/repokit` pin out, `node` and `npm:@commitlint/cli` in, then
+  `make deps`.
+- `.config/lefthook/base.yml` and `.config/commitlint.config.mjs` copied fresh from `base`.
+- `commit-msg.conf` into the config's policy: `types` → `type-enum`, `scope_fixed` + `scope_root` →
+  `scope-enum` with `dirs()`, `subject_max` → `header-max-length`, `body_cols` →
+  `body-max-line-length`, `bullet_max` → `body-bullets`' option. Then delete it.
+- The trailer allowlist has no successor: trailers are free.
 
 ## Not here
 
 No secret scanning, no CI, no staleness sweep: nothing notices a copied template drifting from
-upstream, or a repo pinned to an old grader. A guard the templates cannot express — a vault check, a
-secret scan — is a local job calling a script. The grader does not grow lanes.
+upstream. A guard the templates cannot express — a vault check, a secret scan — is a local job
+calling a script.
 
 ## Hacking
 
@@ -159,20 +129,16 @@ make hooks      # once per clone
 make test       # the fixture harness
 make check      # every lane over the whole tree, read only
 make fmt        # the same lanes, writing
-make release    # VERSION=vX.Y.Z - stamp, gate, tag
-make publish    # push, cut the GitHub release, smoke-install it through mise
-make bump       # move templates/base's grader pin to the latest release
 ```
 
 This repo is its own first consumer, without copies: `lefthook.yml` extends `templates/`, the
-Makefile includes `templates/base/make.mk`, and `.config/` holds symlinks into `templates/`. The
-grader on `PATH` is the tree's own `bin/`, never the released one: every change is graded here
-before it ships. `make bump` after a publish moves the pin consumers copy. Prettier is this repo's
-docs formatter and is not shipped.
+Makefile includes `templates/base/make.mk`, `.config/` holds symlinks into `templates/`, and
+`.config/commitlint.config.mjs` imports `base`'s and sets this repo's policy. Prettier is this
+repo's docs formatter and is not shipped. `scripts/{release,notes,publish}.sh` cut the old grader's
+releases and wait to become templates.
 
 Tests are plain bash: `tests/commit-msg/<name>.msg` next to `<name>.expect` holding the expected
-exit code, and cases in `tests/run.sh` that copy templates into throwaway repos and commit through
-them. `scripts/smoke.sh` installs a published release through mise and grades with it;
-`make publish` runs it last.
+exit code, graded under `tests/commit-msg/commitlint.config.mjs`, and cases in `tests/run.sh` that
+copy templates into throwaway repos and commit through them.
 
 MIT.
