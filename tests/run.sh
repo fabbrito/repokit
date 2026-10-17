@@ -8,8 +8,8 @@
 #
 # lefthook's and commitlint's mechanics are theirs to test. These cases prove
 # only what is ours: the body-bullets rule, and the templates - which job runs
-# in which hook, which writes, which stages, the file set `check` and `fix`
-# compute - copied into a throwaway repo the way a consumer would.
+# in which hook, which writes, which stages, the file set `make check` and
+# `make fmt` compute - copied into a throwaway repo the way a consumer would.
 #
 # No errexit: a failing case is the point, not a reason to stop.
 set -uo pipefail
@@ -158,23 +158,27 @@ run_commit_msg_output() {
 # --------------------------------------------------------------- templates
 
 # A consumer repo in $repo: the named templates copied where the README
-# says, a lefthook.yml extending them, hooks installed. base always, and
-# first. The rc guard is left out - it needs mise, and gets its own case.
+# says, a lefthook.yml extending them, a Makefile including them, hooks
+# installed. base always, and first. The rc guard is left out - it needs
+# mise, and gets its own case.
 mkconsumer() {
-	local t list=''
+	local t list='' includes=''
 	repo=$(mktemp -d -p "$tmproot") || return 1
 	git -C "$repo" init -q
 	git -C "$repo" config user.email 'test@example.com'
 	git -C "$repo" config user.name 'test'
-	mkdir -p "$repo/.config/lefthook"
+	mkdir -p "$repo/.config/lefthook" "$repo/.config/make"
 	cp "$src/templates/base/commitlint.config.mjs" "$repo/.config/" || return 1
 	for t in base "$@"; do
 		[[ $t == base && -n $list ]] && continue
 		cp "$src/templates/$t/lefthook.yml" "$repo/.config/lefthook/$t.yml" ||
 			return 1
+		cp "$src/templates/$t/make.mk" "$repo/.config/make/$t.mk" || return 1
 		list+="  - .config/lefthook/$t.yml"$'\n'
+		includes+="include .config/make/$t.mk"$'\n'
 	done
 	printf 'extends:\n%s' "$list" >"$repo/lefthook.yml"
+	printf '%s' "$includes" >"$repo/Makefile"
 	git -C "$repo" add -A
 	LEFTHOOK=0 git -C "$repo" commit -qm 'feat: init' || return 1
 	(cd "$repo" && lefthook install >/dev/null 2>&1)
@@ -184,8 +188,10 @@ commit() {
 	(cd "$repo" && git commit -qm "$1" 2>&1)
 }
 
-lh() {
-	(cd "$repo" && lefthook run "$@" 2>&1)
+# stdin closed: a lane handed no paths that falls back to reading it fails
+# rather than hangs.
+mk() {
+	make -C "$repo" --no-print-directory "$@" 2>&1 </dev/null
 }
 
 unformatted='#!/bin/bash\nif true;then echo hi;fi\n'
@@ -238,10 +244,7 @@ case_base_rc_refuses_without_mise() {
 case_base_make_deps_extends() {
 	local out
 	mkconsumer || return
-	mkdir -p "$repo/.config/make"
-	cp "$src/templates/base/make.mk" "$repo/.config/make/base.mk"
-	printf 'include .config/make/base.mk\ndeps::\n\techo repo-deps\n' \
-		>"$repo/Makefile"
+	printf 'deps::\n\techo repo-deps\n' >>"$repo/Makefile"
 
 	out=$(make -C "$repo" -n --no-print-directory deps 2>&1)
 	want_exit 'base/deps extends without a make error' 0 $?
@@ -283,38 +286,53 @@ case_shell_symlink_skipped() {
 	want_exit 'shell/a symlink never reaches a lane' 0 $?
 }
 
-# check: our file set - untracked included - and no job that writes.
+# make check: the whole tree, untracked included, and no lane that writes.
 case_shell_check_is_read_only() {
 	mkconsumer shell || return
 	printf %b "$unformatted" >"$repo/new.sh"
-	lh check >/dev/null
-	want_exit 'shell/check sees an untracked file' 1 $?
+	mk check >/dev/null
+	want_exit 'shell/check sees an untracked file' 2 $?
 	want_not_in 'shell/check never writes' 'if true; then' \
 		"$(<"$repo/new.sh")"
 	want_exit 'shell/check never stages' 0 \
 		"$(git -C "$repo" diff --cached --name-only | wc -l)"
 }
 
-# fix: writes, and no stage_fixed.
-case_shell_fix_never_stages() {
+# A committed file is in the tree too: check is not the working changes.
+case_shell_check_sees_committed() {
+	mkconsumer shell || return
+	printf %b "$unformatted" >"$repo/old.sh"
+	git -C "$repo" add old.sh
+	LEFTHOOK=0 git -C "$repo" commit -qm 'feat: old' || return
+	mk check >/dev/null
+	want_exit 'shell/check sees a committed file' 2 $?
+}
+
+# make fmt: writes, and stages nothing.
+case_shell_fmt_never_stages() {
 	mkconsumer shell || return
 	printf %b "$unformatted" >"$repo/new.sh"
-	lh fix >/dev/null
-	want_exit 'shell/fix exits 0' 0 $?
-	want_in 'shell/fix writes' "$formatted" "$(<"$repo/new.sh")"
-	want_exit 'shell/fix never stages' 0 \
+	mk fmt >/dev/null
+	want_exit 'shell/fmt exits 0' 0 $?
+	want_in 'shell/fmt writes' "$formatted" "$(<"$repo/new.sh")"
+	want_exit 'shell/fmt never stages' 0 \
 		"$(git -C "$repo" diff --cached --name-only | wc -l)"
 }
 
-# No HEAD: `git diff HEAD` fails, and check must fall back, not pass.
-case_shell_check_without_head() {
+# No shell file: no lane runs - shfmt handed nothing would read stdin.
+case_shell_check_without_files() {
 	mkconsumer shell || return
-	rm -rf "$repo/.git"
-	git -C "$repo" init -q
-	(cd "$repo" && lefthook install >/dev/null 2>&1)
-	printf %b "$unformatted" >"$repo/new.sh"
-	lh check >/dev/null
-	want_exit 'shell/check without HEAD still sees files' 1 $?
+	mk check >/dev/null
+	want_exit 'shell/check with no shell file passes' 0 $?
+}
+
+# A symlink never reaches a lane, in make as in the hooks.
+case_shell_check_skips_symlinks() {
+	mkconsumer shell || return
+	printf 'x=1\n' >"$repo/target"
+	ln -s target "$repo/link.sh"
+	mk check >/dev/null
+	want_exit 'shell/check skips a symlink' 0 $?
 }
 
 # The split every template promises, read off lefthook's merged config rather
@@ -322,11 +340,10 @@ case_shell_check_without_head() {
 # lanes are those tools' business. What is ours is the shape.
 #
 #   - a job handed paths skips symlinks
-#   - only pre-commit re-stages, and only a job handed the staged paths: a
-#     whole-tree writer would leave the rest unstaged
-#   - every check and fix job computes its own file set - without `files` it
-#     would grade the staged set, which is not what check promises
-#   - check mirrors pre-commit job for job, and fix only fixes what check checks
+#   - a job re-stages only when handed the staged paths: a whole-tree writer
+#     would leave the rest unstaged
+#   - pre-commit is the only lefthook hook besides commit-msg: the whole tree
+#     is make.mk's, which parses with only base beside it
 case_templates_keep_the_split() {
 	local t json bad out
 	for t in "$src"/templates/*/; do
@@ -342,29 +359,26 @@ case_templates_keep_the_split() {
 
 		json=$(cd "$repo" && lefthook dump --format json 2>/dev/null)
 		bad=$(jq -r '
-			def jobs($h): (.[$h].jobs // [])[] | . + {hook: $h};
-			[jobs("pre-commit"), jobs("check"), jobs("fix")][]
+			(.["pre-commit"].jobs // [])[]
 			| select(
 				((.run | test("\\{(staged_)?files\\}")) and
 					((.file_types // []) | index("not symlink") | not))
-				or (.stage_fixed and
-					(.hook != "pre-commit" or (.run | test("\\{staged_files\\}") | not)))
-				or (.hook != "pre-commit" and .name != "lefthook-validate" and
-					(.files // "" | length == 0))
+				or (.stage_fixed and (.run | test("\\{staged_files\\}") | not))
 			)
-			| "\(.hook)/\(.name)"' <<<"$json")
+			| "pre-commit/\(.name)"' <<<"$json")
 		want_exit "templates/$t: every job keeps the split" 0 \
 			"$(printf '%s' "$bad" | wc -w)"
 		[[ -z $bad ]] || no "templates/$t: jobs off the split" "$bad"
 
 		bad=$(jq -r '
-			def names($h): [(.[$h].jobs // [])[].name] | sort;
-			if names("pre-commit") != names("check") then "check != pre-commit"
-			elif (names("fix") - names("check")) != [] then "fix outside check"
-			else empty end' <<<"$json")
-		want_exit "templates/$t: check mirrors pre-commit, fix within check" 0 \
+			keys[] | select(test("^(check|fix)$"))' <<<"$json")
+		want_exit "templates/$t: no whole-tree lefthook hook" 0 \
 			"$(printf '%s' "$bad" | wc -w)"
-		[[ -z $bad ]] || no "templates/$t: hooks out of step" "$bad"
+		[[ -z $bad ]] || no "templates/$t: lanes belong in make.mk" "$bad"
+
+		# -n: the recipes, not the tools - this repo pins few of them.
+		out=$(mk -n check fmt)
+		want_exit "templates/$t: make check and fmt parse beside base" 0 $?
 	done
 }
 
@@ -392,8 +406,10 @@ cases=(
 	case_shell_shellcheck_refuses
 	case_shell_symlink_skipped
 	case_shell_check_is_read_only
-	case_shell_fix_never_stages
-	case_shell_check_without_head
+	case_shell_check_sees_committed
+	case_shell_fmt_never_stages
+	case_shell_check_without_files
+	case_shell_check_skips_symlinks
 	case_templates_keep_the_split
 )
 

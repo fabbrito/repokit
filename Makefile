@@ -2,11 +2,12 @@
 # This repo is its own first consumer: base.mk is included from templates/,
 # not copied.
 include templates/base/make.mk
+include templates/shell/make.mk
 
 # base.mk defines `deps` first; `help` stays the default.
 .DEFAULT_GOAL := help
 
-.PHONY: help test check fmt
+.PHONY: help test
 
 define HELP_AWK
 BEGIN {
@@ -26,12 +27,13 @@ help: ## show this help
 test: ## the fixture harness - body-bullets + templates through lefthook
 	tests/run.sh
 
-# The lanes live in lefthook.yml, which extends templates/.
-check: ## the whole-tree gate - every lane, read only
-	lefthook run check --all-files
+# Prettier: this repo's docs formatter, not shipped. check/fmt are base.mk's;
+# this appends. The pattern is quoted: prettier expands it, not sh.
+check::
+	prettier --check '**/*.{md,json,yml,yaml}'
 
-fmt: ## the same lanes, writing - never stages
-	lefthook run fix --all-files
+fmt::
+	prettier --write '**/*.{md,json,yml,yaml}'
 
 # scripts/{release,notes,publish}.sh still cut the grader's releases: they
 # wait to become templates, with no target until then.

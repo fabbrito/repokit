@@ -19,19 +19,19 @@ $ git commit -F msg
 
 Needs mise. Copy `base`, then whichever others the repo needs, each file to where its header says:
 
-| Template | mise                       | lefthook                          | Also                                                                   |
-| -------- | -------------------------- | --------------------------------- | ---------------------------------------------------------------------- |
-| `base`   | lefthook, node, commitlint | `commitlint`, `lefthook validate` | `commitlint.config.mjs`, `lefthook-rc.sh`, `make.mk` (`deps`, `hooks`) |
-| `shell`  | shfmt, shellcheck          | shfmt, shellcheck                 | flags in `.shellcheckrc`                                               |
-| `dprint` | dprint                     | dprint: md, json, toml, yaml      | a starter `dprint.json`                                                |
-| `rust`   | — (`rust-toolchain.toml`)  | cargo fmt, cargo check            |                                                                        |
-| `ts`     | bun                        | oxfmt, oxlint, typecheck          | tools pinned by `bun.lock`                                             |
+| Template | mise                       | lefthook                          | Also                                                                                   |
+| -------- | -------------------------- | --------------------------------- | -------------------------------------------------------------------------------------- |
+| `base`   | lefthook, node, commitlint | `commitlint`, `lefthook validate` | `commitlint.config.mjs`, `lefthook-rc.sh`, `make.mk` (`deps`, `hooks`, `check`, `fmt`) |
+| `shell`  | shfmt, shellcheck          | shfmt, shellcheck                 | flags in `.shellcheckrc`                                                               |
+| `dprint` | dprint                     | dprint: md, json, toml, yaml      | a starter `dprint.json`                                                                |
+| `rust`   | — (`rust-toolchain.toml`)  | cargo fmt, cargo check            |                                                                                        |
+| `ts`     | bun                        | oxfmt, oxlint, typecheck          | tools pinned by `bun.lock`                                                             |
 
 ```
 templates/<t>/mise.toml     → .config/mise/conf.d/<t>.toml
 templates/<t>/lefthook.yml  → .config/lefthook/<t>.yml
+templates/<t>/make.mk       → .config/make/<t>.mk
 templates/base/lefthook-rc.sh → .config/lefthook-rc.sh
-templates/base/make.mk      → .config/make/base.mk
 templates/base/commitlint.config.mjs → .config/commitlint.config.mjs
 ```
 
@@ -46,12 +46,10 @@ extends:
 ```
 
 ```make
-# Makefile - first line
+# Makefile - base first, then one include per template
 include .config/make/base.mk
+include .config/make/shell.mk
 .DEFAULT_GOAL := help # base.mk defines `deps` first
-
-check: ## the commit gate - run before committing
-	lefthook run check
 ```
 
 `make deps` installs the pinned tools (`mise install`); `make hooks`, once per clone, only the git
@@ -63,18 +61,25 @@ deps::
 	mise exec -- bun install # mise exec: PATH was read before mise install
 ```
 
+`check` and `fmt` extend the same way: each template's `make.mk` appends its lanes, and so does a
+repo's own. `$(call tree_files,'<pathspec>')` is base's whole-tree file set for a lane that takes
+paths.
+
+Moving from the `check`/`fix` lefthook groups: delete the Makefile's own `check:` / `fmt:` — a
+single-colon rule beside base's `check::` is a make error — and `include` each `.config/make/<t>.mk`
+after `base.mk`. A target depending on `check` keeps working.
+
 ## Hooks
 
-Every template splits its jobs across three hooks, and a repo's own jobs should follow suit:
+Two scopes, same tools. lefthook is the git hooks only; the whole tree is make's, plain commands,
+not `lefthook run`. A new lane goes in both: a template's `lefthook.yml` and its `make.mk`, a repo's
+own `lefthook.yml` and Makefile.
 
-| Hook         | Files                                       | Formatters                          | Linters |
-| ------------ | ------------------------------------------- | ----------------------------------- | ------- |
-| `pre-commit` | the staged set                              | write, and re-stage (`stage_fixed`) | check   |
-| `check`      | working changes vs HEAD, untracked included | check                               | check   |
-| `fix`        | same as `check`                             | write, never stage                  | —       |
-
-`--all-files` swaps the set for every tracked file: `lefthook run check --all-files` is the
-whole-tree gate.
+| Where               | Files                                           | Formatters                          | Linters |
+| ------------------- | ----------------------------------------------- | ----------------------------------- | ------- |
+| `pre-commit` (hook) | the staged set                                  | write, and re-stage (`stage_fixed`) | check   |
+| `make check`        | the whole tree, untracked included, ignored out | check                               | check   |
+| `make fmt`          | same as `check`                                 | write, never stage                  | —       |
 
 - **Pinned or nothing.** Git hooks never see `mise activate`. The `rc:` guard in `base` puts mise's
   tools on `PATH` before lefthook runs, and fails the hook when mise is missing — a hook that falls

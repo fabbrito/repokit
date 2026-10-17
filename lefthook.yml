@@ -17,27 +17,3 @@ pre-commit:
     - name: prettier-config
       glob: &config [".prettierrc.json", ".prettierignore"]
       run: prettier --check '**/*.{md,json,yml,yaml}'
-
-check:
-  jobs:
-    - name: prettier
-      glob: *docs
-      file_types: *file
-      files: &changed "sh -c 'git diff --name-only --diff-filter=ACMR HEAD 2>/dev/null || git diff --cached --name-only --diff-filter=ACMR; git ls-files --others --exclude-standard'"
-      run: prettier --check {files}
-    - name: prettier-config
-      glob: *config
-      files: *changed
-      run: prettier --check '**/*.{md,json,yml,yaml}'
-
-fix:
-  jobs:
-    - name: prettier
-      glob: *docs
-      file_types: *file
-      files: *changed
-      run: prettier --write {files}
-    - name: prettier-config
-      glob: *config
-      files: *changed
-      run: prettier --write '**/*.{md,json,yml,yaml}'
