@@ -1,0 +1,1 @@
+../templates/base/make-phony.sh

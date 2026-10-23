@@ -169,6 +169,7 @@ mkconsumer() {
 	git -C "$repo" config user.name 'test'
 	mkdir -p "$repo/.config/lefthook" "$repo/.config/make"
 	cp "$src/templates/base/commitlint.config.mjs" "$repo/.config/" || return 1
+	cp "$src/templates/base/make-phony.sh" "$repo/.config/" || return 1
 	for t in base "$@"; do
 		[[ $t == base && -n $list ]] && continue
 		cp "$src/templates/$t/lefthook.yml" "$repo/.config/lefthook/$t.yml" ||
@@ -255,6 +256,27 @@ case_base_rc_puts_the_pins_on_path() {
 		PATH=$bin:/usr/bin:/bin git commit -qm 'feat: a' 2>&1)
 	want_exit 'base/the rc puts the pinned tools on PATH' 0 $? ||
 		no 'base/the rc commit said' "$out"
+}
+
+# A documented target that is not .PHONY is refused, by make and the hook
+# alike: a dir of its name would make it "up to date". Declared, it passes.
+case_base_make_phony() {
+	local out
+	mkconsumer || return
+	printf '\nbuild: ## build it\n\t@:\n' >>"$repo/Makefile"
+	mkdir "$repo/build"
+
+	out=$(mk check)
+	want_exit 'base/an undeclared target fails make check' 2 $?
+	want_in 'base/make check names it' 'not .PHONY: Makefile: build' "$out"
+
+	git -C "$repo" add Makefile
+	commit 'feat: build' >/dev/null
+	want_exit 'base/an undeclared target refuses the commit' 1 $?
+
+	printf '.PHONY: build\n' >>"$repo/Makefile"
+	mk check >/dev/null
+	want_exit 'base/a declared target passes' 0 $?
 }
 
 # A repo appends its own deps as another `deps::`: base's tools install
@@ -433,6 +455,7 @@ cases=(
 	case_base_rc_refuses_without_mise
 	case_base_rc_puts_the_pins_on_path
 	case_base_make_deps_extends
+	case_base_make_phony
 	case_shell_formats_and_restages
 	case_shell_shellcheck_refuses
 	case_shell_symlink_skipped

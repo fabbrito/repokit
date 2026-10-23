@@ -19,19 +19,20 @@ $ git commit -F msg
 
 Needs mise. Copy `base`, then whichever others the repo needs, each file to where its header says:
 
-| Template | mise                       | lefthook                          | Also                                                                                   |
-| -------- | -------------------------- | --------------------------------- | -------------------------------------------------------------------------------------- |
-| `base`   | lefthook, node, commitlint | `commitlint`, `lefthook validate` | `commitlint.config.mjs`, `lefthook-rc.sh`, `make.mk` (`deps`, `hooks`, `check`, `fmt`) |
-| `shell`  | shfmt, shellcheck          | shfmt, shellcheck                 | flags in `.shellcheckrc`                                                               |
-| `dprint` | dprint                     | dprint: md, json, toml, yaml      | a starter `dprint.json`                                                                |
-| `rust`   | — (`rust-toolchain.toml`)  | cargo fmt, cargo check            |                                                                                        |
-| `ts`     | bun                        | oxfmt, oxlint, typecheck          | tools pinned by `bun.lock`                                                             |
+| Template | mise                       | lefthook                                        | Also                                                                                                    |
+| -------- | -------------------------- | ----------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| `base`   | lefthook, node, commitlint | `commitlint`, `lefthook validate`, `make-phony` | `commitlint.config.mjs`, `lefthook-rc.sh`, `make-phony.sh`, `make.mk` (`deps`, `hooks`, `check`, `fmt`) |
+| `shell`  | shfmt, shellcheck          | shfmt, shellcheck                               | flags in `.shellcheckrc`                                                                                |
+| `dprint` | dprint                     | dprint: md, json, toml, yaml                    | a starter `dprint.json`                                                                                 |
+| `rust`   | — (`rust-toolchain.toml`)  | cargo fmt, cargo check                          |                                                                                                         |
+| `ts`     | bun                        | oxfmt, oxlint, typecheck                        | tools pinned by `bun.lock`                                                                              |
 
 ```
 templates/<t>/mise.toml     → .config/mise/conf.d/<t>.toml
 templates/<t>/lefthook.yml  → .config/lefthook/<t>.yml
 templates/<t>/make.mk       → .config/make/<t>.mk
 templates/base/lefthook-rc.sh → .config/lefthook-rc.sh
+templates/base/make-phony.sh → .config/make-phony.sh
 templates/base/commitlint.config.mjs → .config/commitlint.config.mjs
 ```
 
@@ -60,6 +61,9 @@ with more to install appends it as its own `deps::`, run after base's:
 deps::
 	mise exec -- bun install # mise exec: PATH was read before mise install
 ```
+
+A target documented with `## text` is a command: declare it `.PHONY`, or a directory of its name
+makes it "up to date". `make-phony` refuses one that is not, in the hook and in `make check`.
 
 `check` and `fmt` extend the same way: each template's `make.mk` appends its lanes, and so does a
 repo's own. `$(call tree_files,'<pathspec>')` is base's whole-tree file set for a lane that takes

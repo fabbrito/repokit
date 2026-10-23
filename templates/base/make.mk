@@ -38,6 +38,7 @@ hooks: ## install lefthook's hooks for this clone
 
 check:: ## every lane over the whole tree, read only
 	lefthook validate
+	.config/make-phony.sh
 
 fmt:: ## the same lanes, writing - never stages
 	@:
