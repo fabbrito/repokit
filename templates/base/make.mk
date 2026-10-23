@@ -1,6 +1,11 @@
 # templates/base: copy to .config/make/base.mk and `include` it first in the
 # Makefile. mise's pinned tools first on PATH, so a target runs what the hooks
 # run. No mise is an error, not a quiet fallback.
+#
+# Bash for every recipe and $(shell) after this line, a repo's own included:
+# first in the Makefile is what makes that every one.
+SHELL := /bin/bash
+
 ifeq ($(shell command -v mise),)
 $(error mise not on PATH - https://mise.jdx.dev, then make deps)
 endif
@@ -41,4 +46,4 @@ fmt:: ## the same lanes, writing - never stages
 # untracked, ignored out, symlinks and deleted paths skipped. Words, not
 # lines: a path with a space splits.
 tree_files = $(shell git ls-files -co --exclude-standard -- $(1) | \
-	while read -r f; do [ -L "$$f" ] || [ ! -e "$$f" ] || echo "$$f"; done)
+	while IFS= read -r f; do [[ -L $$f || ! -e $$f ]] || echo "$$f"; done)

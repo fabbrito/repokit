@@ -239,6 +239,24 @@ case_base_rc_refuses_without_mise() {
 	want_in 'base/no mise says what to install' 'mise not on PATH' "$out"
 }
 
+# With mise on PATH and nothing else, the rc is how the hook finds lefthook
+# and commitlint: a commit that lands is the pins reached through it.
+case_base_rc_puts_the_pins_on_path() {
+	local out bin
+	mkconsumer || return
+	cp "$src/templates/base/lefthook-rc.sh" "$repo/.config/lefthook-rc.sh"
+	mkdir -p "$repo/.config/mise/conf.d"
+	cp "$src/templates/base/mise.toml" "$repo/.config/mise/conf.d/base.toml"
+	bin=$(mktemp -d -p "$tmproot") || return
+	ln -s "$(command -v mise)" "$bin/mise"
+	printf 'x\n' >"$repo/a.txt"
+	git -C "$repo" add -A
+	out=$(cd "$repo" && MISE_TRUSTED_CONFIG_PATHS=$repo \
+		PATH=$bin:/usr/bin:/bin git commit -qm 'feat: a' 2>&1)
+	want_exit 'base/the rc puts the pinned tools on PATH' 0 $? ||
+		no 'base/the rc commit said' "$out"
+}
+
 # A repo appends its own deps as another `deps::`: base's tools install
 # first, and `hooks` installs none. -n: the recipes, not a real install.
 case_base_make_deps_extends() {
@@ -326,6 +344,18 @@ case_shell_check_without_files() {
 	want_exit 'shell/check with no shell file passes' 0 $?
 }
 
+# A tracked file deleted from the tree never reaches a lane: shfmt handed a
+# missing path fails the whole check.
+case_shell_check_skips_deleted() {
+	mkconsumer shell || return
+	printf 'x=1\n' >"$repo/gone.sh"
+	git -C "$repo" add gone.sh
+	LEFTHOOK=0 git -C "$repo" commit -qm 'feat: gone' || return
+	rm "$repo/gone.sh"
+	mk check >/dev/null
+	want_exit 'shell/check skips a deleted file' 0 $?
+}
+
 # A symlink never reaches a lane, in make as in the hooks.
 case_shell_check_skips_symlinks() {
 	mkconsumer shell || return
@@ -401,6 +431,7 @@ cases=(
 	case_base_grades_the_message
 	case_base_validate_refuses_a_typo
 	case_base_rc_refuses_without_mise
+	case_base_rc_puts_the_pins_on_path
 	case_base_make_deps_extends
 	case_shell_formats_and_restages
 	case_shell_shellcheck_refuses
@@ -410,6 +441,7 @@ cases=(
 	case_shell_fmt_never_stages
 	case_shell_check_without_files
 	case_shell_check_skips_symlinks
+	case_shell_check_skips_deleted
 	case_templates_keep_the_split
 )
 
