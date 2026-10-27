@@ -1,9 +1,8 @@
 #!/usr/bin/env bash
-# templates/base: copy to .config/make-phony.sh. Every target `make help`
-# lists - `name: ## text` - is a command, never a file, so each must be
-# .PHONY: undeclared, a directory of the same name (build/) makes `make build`
-# "up to date" and runs nothing. make's own database says what is phony: it
-# has read every include.
+# templates/base: copy to .config/make-phony.sh. A target `make help` lists -
+# `name: ## text` - is a command, never a file: undeclared, a directory of the
+# same name makes it "up to date" and runs nothing. make's database says what is
+# phony, and it has read every include.
 set -uo pipefail
 
 root=$(git rev-parse --show-toplevel) || exit

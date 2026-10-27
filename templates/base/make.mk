@@ -1,20 +1,12 @@
-# templates/base: copy to .config/make/base.mk and `include` it first in the
-# Makefile. mise's pinned tools first on PATH, so a target runs what the hooks
-# run. No mise is an error, not a quiet fallback.
-#
-# Bash for every recipe and $(shell) after this line, a repo's own included:
-# first in the Makefile is what makes that every one. Strict as a script:
-# an unset variable or a failed pipe stage fails the recipe.
+# templates/base: copy to .config/make/base.mk, `include` it first - that is
+# what makes Bash and -uo pipefail every recipe's, a repo's own included.
 SHELL := /bin/bash
 .SHELLFLAGS := -uo pipefail -c
 
 ifeq ($(shell command -v mise),)
 $(error mise not on PATH - https://mise.jdx.dev, then make deps)
 endif
-# Recursive, not `:=`: make expands it once per recipe, so a target reads the
-# pins as they are when it starts - `fmt` and `check` after a bump get the
-# versions it installed, where parse-time pins would be the run's first. ~11 ms
-# a recipe.
+# Recursive: expanded per recipe, so a bump's pins reach `fmt` and `check`.
 orig_path := $(PATH)
 export PATH = $(shell mise bin-paths | paste -sd: -):$(orig_path)
 
@@ -22,15 +14,11 @@ export PATH = $(shell mise bin-paths | paste -sd: -):$(orig_path)
 
 ##@ Tools and hooks
 
-# Once per clone, and after a bump in mise. Double-colon: a repo appends its
-# own deps (collections, packages) as another `deps::`, run after this one,
-# with no `##` - that would list deps twice. Plain `deps:` is a make error.
+# Double-colon: a repo appends its own `deps::`, with no `##` - deps twice.
 deps:: ## install the pinned tools
 	mise install
 
-# Once per clone, after make deps: hooks do not travel with the tree.
-# core.hooksPath is unset first - a leftover would hide lefthook's hooks.
-# mise exec, not PATH: PATH was read before make deps installed lefthook.
+# Hooks do not travel with the tree; mise exec, since make deps may not have run.
 hooks: ## install lefthook's hooks for this clone
 	@git config --unset core.hooksPath || true
 	mise exec -- lefthook install
@@ -38,9 +26,7 @@ hooks: ## install lefthook's hooks for this clone
 
 ##@ Gate
 
-# The hooks grade the staged set; these, the whole tree. Plain commands, not
-# `lefthook run`: a hook is for git. Double-colon like deps: each template's
-# make.mk appends its lanes as another `check::` / `fmt::`, with no `##`.
+# The whole tree, plain commands, not `lefthook run`. Double-colon: lanes append.
 .PHONY: check fmt
 
 check:: ## every lane over the whole tree, read only
@@ -52,28 +38,21 @@ fmt:: ## the same lanes, writing - never stages
 
 ##@ Upgrade
 
-# A bump is one tool's own updater, appended as a prerequisite of `bump`:
-# `bump: bump-dprint`. Prerequisites run in include order - base's guard and
-# pins, then each template's, then the repo's own - and `upgrade` reaches fmt
-# and check only once every bump has run.
+# A bump is a prerequisite of `bump`: include order is run order.
 .PHONY: upgrade bump upgrade-guard bump-mise
 
 upgrade: bump fmt check ## bump every pin and dependency, then format and check
 
 bump: upgrade-guard bump-mise
 
-# --bump: the pins are exact, so nothing moves without it. --local: this repo's
-# tools, never the global config's. The age is mise.toml's minimum_release_age.
-# prune: the version just replaced is used by nothing, so it goes now rather
-# than after upgrade.prune_after's grace period.
+# --bump: a pin is exact. --local: not the global config's. prune: nothing uses
+# the version it replaced now.
 bump-mise:
 	mise upgrade --bump --local
 	mise prune -y -q
 
-# A bump is a commit's worth of diff nobody has read yet: start clean, so the
-# diff is only the bumps. Untracked files are in no diff. A red `check` leaves
-# it uncommitted to look at. One line: make gives each its own shell, and a
-# `test ... ||` alone is a syntax error.
+# The diff is the bumps: untracked files are in no diff. One line - a `test ... ||`
+# alone is a syntax error, make giving each line its own shell.
 upgrade-guard:
 	@test -z "$$(git status --porcelain --untracked-files=no)" || \
 		{ echo 'upgrade: the tree is dirty; commit first' >&2; exit 1; }

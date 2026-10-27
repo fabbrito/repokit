@@ -9,10 +9,8 @@ check::
 fmt::
 	bun oxfmt
 
-# The lock moves, and package.json's floors with it - inside the declared range:
-# the operator and the major stay. --latest rewrites them, a decision by hand.
-# The day of cooling is bunfig.toml's install.minimumReleaseAge, and it holds
-# here too: bun takes the newest release that clears it.
+# The lock moves and package.json's floors with it, inside the declared range:
+# --latest rewrites them, a decision by hand. The day is bunfig.toml's.
 .PHONY: bump-bun
 
 bump: bump-bun

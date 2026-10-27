@@ -1,14 +1,13 @@
 # templates/ts: copy to .config/lefthook/ts.yml, list it under `extends:`.
 #
-# oxfmt formats the staged paths. A change to .oxfmtrc.json redefines
-# "formatted" for the whole tree, so that job checks everything, and only
-# checks on commit: stage_fixed re-stages staged paths only.
+# oxfmt formats the staged paths; a change to .oxfmtrc.json redefines
+# "formatted" for the tree, so that job checks everything - stage_fixed
+# re-stages staged paths only.
 #
-# oxlint and tsc read the whole graph - a formatted file can still close an
-# import cycle or break a type against an unformatted one - so they run on
-# the tree. No lint fix on commit: oxlint --fix rewrites code, not whitespace.
-# Tests are not a lane here; add one if they are fast enough to sit between
-# you and a commit. The whole tree is make.mk's.
+# oxlint and tsc read the graph - a formatted file can still break a type
+# against an unformatted one - so they run on the tree. No lint fix on commit:
+# oxlint --fix rewrites code. Tests are no lane here; add one if it is fast
+# enough. The whole tree is make.mk's.
 pre-commit:
   jobs:
     - name: oxfmt

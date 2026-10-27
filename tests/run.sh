@@ -301,10 +301,8 @@ case_base_make_deps_extends() {
 	want_not_in 'base/hooks installs no tools' 'mise install' "$out"
 }
 
-# The guard is `bump`'s first prerequisite: a dirty tree stops the upgrade
-# before a tool runs. Make hands each recipe line its own shell, so a guard
-# split over two is a syntax error, not a check - and only tracked dirt counts,
-# an untracked file being in no diff.
+# `bump`'s first prerequisite. Only tracked dirt stops it - an untracked file is
+# in no diff - and split over two lines the guard was a syntax error.
 case_base_make_upgrade_guard() {
 	local out
 	mkconsumer || return
@@ -464,9 +462,7 @@ case_templates_keep_the_split() {
 		out=$(mk -n check fmt)
 		want_exit "templates/$t: make check and fmt parse beside base" 0 $?
 
-		# A template's bump is its own updater, reached only if its make.mk says
-		# `bump: bump-x`. The recipe is the tool's; the wiring is ours. -p: the
-		# database, which is the one place a prerequisite is written down.
+		# `bump: bump-x` is the wiring; -p prints the database's prerequisite.
 		out=$(make -C "$repo" -p -n --no-print-directory bump 2>/dev/null |
 			rg '^bump: ')
 		for bump in $(rg -o --no-filename '^bump-[a-z]+:' "$src/templates/$t/make.mk" |
