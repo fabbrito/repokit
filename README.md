@@ -19,13 +19,13 @@ $ git commit -F msg
 
 Needs mise. Copy `base`, then whichever others the repo needs, each file to where its header says:
 
-| Template | mise                       | lefthook                                        | Also                                                                                                    |
-| -------- | -------------------------- | ----------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
-| `base`   | lefthook, node, commitlint | `commitlint`, `lefthook validate`, `make-phony` | `commitlint.config.mjs`, `lefthook-rc.sh`, `make-phony.sh`, `make.mk` (`deps`, `hooks`, `check`, `fmt`) |
-| `shell`  | shfmt, shellcheck          | shfmt, shellcheck                               | flags in `.shellcheckrc`                                                                                |
-| `dprint` | dprint                     | dprint: md, json, toml, yaml                    | a starter `dprint.json`                                                                                 |
-| `rust`   | — (`rust-toolchain.toml`)  | cargo fmt, cargo check                          |                                                                                                         |
-| `ts`     | bun                        | oxfmt, oxlint, typecheck                        | tools pinned by `bun.lock`                                                                              |
+| Template | mise                       | lefthook                                        | `make upgrade`       | Also                                                                                                               |
+| -------- | -------------------------- | ----------------------------------------------- | -------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| `base`   | lefthook, node, commitlint | `commitlint`, `lefthook validate`, `make-phony` | mise's pins          | `commitlint.config.mjs`, `lefthook-rc.sh`, `make-phony.sh`, `make.mk` (`deps`, `hooks`, `check`, `fmt`, `upgrade`) |
+| `shell`  | shfmt, shellcheck          | shfmt, shellcheck                               | —                    | flags in `.shellcheckrc`                                                                                           |
+| `dprint` | dprint                     | dprint: md, json, toml, yaml                    | the plugins          | a starter `dprint.json`                                                                                            |
+| `rust`   | cargo-cooldown             | cargo fmt, cargo check                          | `Cargo.lock`, cooled | `cooldown.toml`; Rust itself by `rust-toolchain.toml`                                                              |
+| `ts`     | bun                        | oxfmt, oxlint, typecheck                        | —                    | tools pinned by `bun.lock`                                                                                         |
 
 ```
 templates/<t>/mise.toml     → .config/mise/conf.d/<t>.toml
@@ -34,6 +34,7 @@ templates/<t>/make.mk       → .config/make/<t>.mk
 templates/base/lefthook-rc.sh → .config/lefthook-rc.sh
 templates/base/make-phony.sh → .config/make-phony.sh
 templates/base/commitlint.config.mjs → .config/commitlint.config.mjs
+templates/rust/cooldown.toml → cooldown.toml     (the repo root)
 ```
 
 Then:
@@ -94,6 +95,38 @@ own `lefthook.yml` and Makefile.
 - Every job handed paths skips symlinks: a formatter handed one fails for the wrong reason.
 - Partially staged files are safe: lefthook hides the unstaged half while jobs run.
 - `LEFTHOOK=0` skips every hook. `lefthook run commit-msg <file>` grades a message by hand.
+- In a recipe, the tool's plain name: `base.mk` already put mise's paths first. `mise exec` appends
+  them, so a tool already on `PATH` wins over the pin - it is for a shell, or a recipe that runs
+  before `make deps` has installed anything.
+
+## Upgrade
+
+`make upgrade` is `bump`, then `fmt` and `check`: nothing is formatted or checked until every bump
+has run, and a bump that breaks the tree is caught before the diff is offered. `bump`'s first
+prerequisite refuses a dirty tree, so the diff is only the bumps.
+
+A bump is one tool's own updater, appended as a prerequisite of `bump` - `bump: bump-dprint` - so
+the order is the order the files are included: base's, then each template's, then the repo's own.
+
+| Template | bumps                                                |
+| -------- | ---------------------------------------------------- |
+| `base`   | mise's pins, `mise upgrade --bump --local`           |
+| `dprint` | the plugins in `dprint.json`, `dprint config update` |
+| `rust`   | `Cargo.lock`, through `cargo cooldown update`        |
+| `ts`     | — (its tools are `bun.lock`'s)                       |
+
+`--bump` because a pin is exact: nothing moves without it. `--local` because the global config's
+tools are not this repo's. A major release is held either way - mise keeps the pin's precision,
+`cargo update` stays inside the requirement - so widening one is a decision made by hand.
+
+**A day of cooling, one place per tool.** A release younger than a day is held, not taken: `base`'s
+`minimum_release_age` for mise, `--minimum-dependency-age P1D` for dprint, `cooldown.toml` for
+cargo - which has no cooldown of its own until `min-publish-age` leaves nightly, so `rust`'s
+`mise.toml` pins `cargo-cooldown` to apply it.
+
+`Cargo.toml` keeps its floors and the lock is what moves: `cargo update` never rewrites a manifest.
+`cargo upgrade` would move the floor too, and it picks by version rather than by publish date - it
+dodges the cooldown, so it is not in the lane.
 
 ## Message rules
 
