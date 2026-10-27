@@ -7,8 +7,9 @@ ifeq ($(shell command -v mise),)
 $(error mise not on PATH - https://mise.jdx.dev, then make deps)
 endif
 # Recursive: expanded per recipe, so a bump's pins reach `fmt` and `check`.
+# A colon per path, none when mise prints nothing: an empty entry is `.`.
 orig_path := $(PATH)
-export PATH = $(shell mise bin-paths | paste -sd: -):$(orig_path)
+export PATH = $(shell mise bin-paths | sed 's/$$/:/' | tr -d '\n')$(orig_path)
 
 .PHONY: deps hooks
 
