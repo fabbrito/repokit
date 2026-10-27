@@ -427,7 +427,7 @@ case_shell_check_honours_editorconfig() {
 #   - pre-commit is the only lefthook hook besides commit-msg: the whole tree
 #     is make.mk's, which parses with only base beside it
 case_templates_keep_the_split() {
-	local t json bad out
+	local t json bad out prereqs line bump_re='^(bump-[a-z0-9-]+):'
 	for t in "$src"/templates/*/; do
 		t=${t%/}
 		t=${t##*/}
@@ -462,13 +462,16 @@ case_templates_keep_the_split() {
 		out=$(mk -n check fmt)
 		want_exit "templates/$t: make check and fmt parse beside base" 0 $?
 
-		# `bump: bump-x` is the wiring; -p prints the database's prerequisite.
-		out=$(make -C "$repo" -p -n --no-print-directory bump 2>/dev/null |
-			rg '^bump: ')
-		for bump in $(rg -o --no-filename '^bump-[a-z]+:' "$src/templates/$t/make.mk" |
-			tr -d ':'); do
-			want_in "templates/$t: $bump is a prerequisite of bump" "$bump" "$out"
-		done
+		# `bump: bump-x` is the wiring, read off make's database as make-phony does.
+		prereqs=''
+		while IFS= read -r line; do
+			[[ $line == 'bump: '* ]] && prereqs="$line "
+		done < <(mk -pRrq :)
+		while IFS= read -r line; do
+			[[ $line =~ $bump_re ]] || continue
+			want_in "templates/$t: ${BASH_REMATCH[1]} is a prerequisite of bump" \
+				" ${BASH_REMATCH[1]} " "$prereqs"
+		done <"$src/templates/$t/make.mk"
 	done
 }
 
