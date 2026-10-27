@@ -314,6 +314,32 @@ case_base_make_deps_extends() {
 	want_not_in 'base/hooks installs no tools' 'mise install' "$out"
 }
 
+# The guard is `bump`'s first prerequisite: a dirty tree stops the upgrade
+# before a tool runs. Make hands each recipe line its own shell, so a guard
+# split over two is a syntax error, not a check - and only tracked dirt counts,
+# an untracked file being in no diff.
+case_base_make_upgrade_guard() {
+	local out
+	mkconsumer || return
+
+	mk upgrade-guard >/dev/null
+	want_exit 'base/the guard passes a clean tree' 0 $?
+
+	printf 'x\n' >"$repo/new"
+	mk upgrade-guard >/dev/null
+	want_exit 'base/an untracked file is no diff' 0 $?
+
+	git -C "$repo" add new
+	out=$(mk upgrade-guard)
+	want_exit 'base/a staged file stops the guard' 2 $?
+	want_in 'base/the guard says what to do' 'the tree is dirty; commit first' "$out"
+
+	git -C "$repo" reset -q
+	printf '\n' >>"$repo/Makefile"
+	mk upgrade-guard >/dev/null
+	want_exit 'base/an unstaged edit stops the guard' 2 $?
+}
+
 # A template's bump is a prerequisite of `bump`, so the order is include
 # order: guard, base's pins, each template's, then the repo's own - and fmt and
 # check only after all of them. -n: nothing runs.
@@ -494,6 +520,7 @@ cases=(
 	case_base_rc_refuses_without_mise
 	case_base_rc_puts_the_pins_on_path
 	case_base_make_deps_extends
+	case_base_make_upgrade_guard
 	case_base_make_upgrade_extends
 	case_base_make_phony
 	case_shell_formats_and_restages

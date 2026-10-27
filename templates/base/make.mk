@@ -69,7 +69,9 @@ bump-mise:
 	mise upgrade --bump --local
 
 # A bump is a commit's worth of diff nobody has read yet: start clean, so the
-# diff is only the bumps. A red `check` leaves it uncommitted to look at.
+# diff is only the bumps. Untracked files are in no diff. A red `check` leaves
+# it uncommitted to look at. One line: make gives each its own shell, and a
+# `test ... ||` alone is a syntax error.
 upgrade-guard:
-	@test -z "$$(git status --porcelain)" ||
+	@test -z "$$(git status --porcelain --untracked-files=no)" || \
 		{ echo 'upgrade: the tree is dirty; commit first' >&2; exit 1; }
