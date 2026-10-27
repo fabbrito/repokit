@@ -37,7 +37,8 @@ refuse() {
 
 tag=$(git describe --tags --exact-match HEAD 2>/dev/null) ||
 	die 'HEAD carries no tag - make release first'
-[[ $tag =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || die "$tag is not a release tag"
+re_tag='^v[0-9]+\.[0-9]+\.[0-9]+$'
+[[ $tag =~ $re_tag ]] || die "$tag is not a release tag"
 [[ $(git branch --show-current) == main ]] || refuse 'not on main'
 [[ -z $(git status --porcelain) ]] || refuse 'tree not clean'
 [[ $(<VERSION) == "$tag" ]] || refuse "VERSION is not stamped $tag"

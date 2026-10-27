@@ -28,7 +28,8 @@ fi
 
 version=${1-}
 version=${version#v}
-if [[ ! $version =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+re_version='^[0-9]+\.[0-9]+\.[0-9]+$'
+if [[ ! $version =~ $re_version ]]; then
 	printf 'usage: %s [--dry-run] <x.y.z>\n' "$0" >&2
 	exit 2
 fi
