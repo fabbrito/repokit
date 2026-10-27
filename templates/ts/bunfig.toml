@@ -1,0 +1,6 @@
+# templates/ts: copy to bunfig.toml at the repo root - into an existing one,
+# the [install] key alone. A release younger than a day is held: base.toml's
+# minimum_release_age in bun's own key. bun takes the newest that clears it,
+# which before a train of quick releases is the last stable one.
+[install]
+minimumReleaseAge = "1d"

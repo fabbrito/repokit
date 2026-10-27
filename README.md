@@ -19,13 +19,13 @@ $ git commit -F msg
 
 Needs mise. Copy `base`, then whichever others the repo needs, each file to where its header says:
 
-| Template | mise                       | lefthook                                        | `make upgrade`       | Also                                                                                                               |
-| -------- | -------------------------- | ----------------------------------------------- | -------------------- | ------------------------------------------------------------------------------------------------------------------ |
-| `base`   | lefthook, node, commitlint | `commitlint`, `lefthook validate`, `make-phony` | mise's pins          | `commitlint.config.mjs`, `lefthook-rc.sh`, `make-phony.sh`, `make.mk` (`deps`, `hooks`, `check`, `fmt`, `upgrade`) |
-| `shell`  | shfmt, shellcheck          | shfmt, shellcheck                               | —                    | flags in `.shellcheckrc`                                                                                           |
-| `dprint` | dprint                     | dprint: md, json, toml, yaml                    | the plugins          | a starter `dprint.json`                                                                                            |
-| `rust`   | cargo-cooldown             | cargo fmt, cargo check                          | `Cargo.lock`, cooled | `cooldown.toml`; Rust itself by `rust-toolchain.toml`                                                              |
-| `ts`     | bun                        | oxfmt, oxlint, typecheck                        | —                    | tools pinned by `bun.lock`                                                                                         |
+| Template | mise                       | lefthook                                        | `make upgrade`                      | Also                                                                                                               |
+| -------- | -------------------------- | ----------------------------------------------- | ----------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| `base`   | lefthook, node, commitlint | `commitlint`, `lefthook validate`, `make-phony` | mise's pins                         | `commitlint.config.mjs`, `lefthook-rc.sh`, `make-phony.sh`, `make.mk` (`deps`, `hooks`, `check`, `fmt`, `upgrade`) |
+| `shell`  | shfmt, shellcheck          | shfmt, shellcheck                               | —                                   | flags in `.shellcheckrc`                                                                                           |
+| `dprint` | dprint                     | dprint: md, json, toml, yaml                    | the plugins                         | a starter `dprint.json`                                                                                            |
+| `rust`   | cargo-cooldown             | cargo fmt, cargo check                          | `Cargo.lock`, cooled                | `cooldown.toml`; Rust itself by `rust-toolchain.toml`                                                              |
+| `ts`     | bun                        | oxfmt, oxlint, typecheck                        | `bun.lock` + `package.json`, cooled | tools pinned by `bun.lock`; a starter `bunfig.toml`                                                                |
 
 ```
 templates/<t>/mise.toml     → .config/mise/conf.d/<t>.toml
@@ -35,6 +35,7 @@ templates/base/lefthook-rc.sh → .config/lefthook-rc.sh
 templates/base/make-phony.sh → .config/make-phony.sh
 templates/base/commitlint.config.mjs → .config/commitlint.config.mjs
 templates/rust/cooldown.toml → cooldown.toml     (the repo root)
+templates/ts/bunfig.toml → bunfig.toml         (the repo root)
 ```
 
 Then:
@@ -112,7 +113,7 @@ the order is the order the files are included: base's, then each template's, the
 | `base`   | mise's pins, `mise upgrade --bump --local`           |
 | `dprint` | the plugins in `dprint.json`, `dprint config update` |
 | `rust`   | `Cargo.lock`, through `cargo cooldown update`        |
-| `ts`     | — (its tools are `bun.lock`'s)                       |
+| `ts`     | `bun.lock` and `package.json`, `bun update`          |
 
 `--bump` because a pin is exact: nothing moves without it. `--local` because the global config's
 tools are not this repo's. A major release is held either way - mise keeps the pin's precision,
@@ -121,13 +122,16 @@ read per recipe, so `fmt` and `check` run the versions the bump just installed, 
 `make deps check` in one invocation works.
 
 **A day of cooling, one place per tool.** A release younger than a day is held, not taken: `base`'s
-`minimum_release_age` for mise, `--minimum-dependency-age P1D` for dprint, `cooldown.toml` for
-cargo - which has no cooldown of its own until `min-publish-age` leaves nightly, so `rust`'s
-`mise.toml` pins `cargo-cooldown` to apply it.
+`minimum_release_age` for mise, `install.minimumReleaseAge` in `bunfig.toml` for bun,
+`--minimum-dependency-age P1D` for dprint, `cooldown.toml` for cargo - which has no cooldown of its
+own until `min-publish-age` leaves nightly, so `rust`'s `mise.toml` pins `cargo-cooldown` to apply
+it.
 
 `Cargo.toml` keeps its floors and the lock is what moves: `cargo update` never rewrites a manifest.
 `cargo upgrade` would move the floor too, and it picks by version rather than by publish date - it
-dodges the cooldown, so it is not in the lane.
+dodges the cooldown, so it is not in the lane. bun is the other way round: `bun update` moves the
+floors inside the range the manifest already declares, and `--latest` - which rewrites the range -
+is the one left by hand.
 
 ## Message rules
 

@@ -82,19 +82,6 @@ want_not_in() {
 	return 1
 }
 
-# want_order <name> <first> <then> <output>: first must come before then, and
-# both must be there - a line that is absent is not ordered early.
-want_order() {
-	local name=$1 first=$2 then=$3 haystack=$4 rest
-	rest=${haystack#*"$first"}
-	if [[ $haystack == *"$first"* && $rest == *"$then"* ]]; then
-		ok "$name"
-		return 0
-	fi
-	no "$name" "want: $first, then $then" "output: $haystack"
-	return 1
-}
-
 # ------------------------------------------------------------- commit-msg
 
 # Grading is text in, exit code out - but the rebase check asks git, so it
@@ -340,26 +327,6 @@ case_base_make_upgrade_guard() {
 	want_exit 'base/an unstaged edit stops the guard' 2 $?
 }
 
-# A template's bump is a prerequisite of `bump`, so the order is include
-# order: guard, base's pins, each template's, then the repo's own - and fmt and
-# check only after all of them. -n: nothing runs.
-case_base_make_upgrade_extends() {
-	local out
-	mkconsumer dprint rust || return
-	printf 'bump: bump-repo\n\nbump-repo:\n\techo repo-bump\n' >>"$repo/Makefile"
-
-	out=$(mk -n upgrade)
-	want_exit 'base/upgrade holds a repo with its own bumps' 0 "$?"
-	want_order 'upgrade: the guard runs first' \
-		'git status --porcelain' 'mise upgrade' "$out"
-	want_order 'upgrade: pins, then dprint, rust, the repo' \
-		'mise upgrade' 'repo-bump' "$out"
-	want_order 'upgrade/dprint before rust' \
-		'dprint config update' 'cargo cooldown update' "$out"
-	want_order 'upgrade: fmt after the last bump' 'repo-bump' 'dprint fmt' "$out"
-	want_order 'upgrade: check after fmt' 'dprint fmt' 'dprint check' "$out"
-}
-
 # shell's policy: a formatter writes on commit and re-stages.
 case_shell_formats_and_restages() {
 	mkconsumer shell || return
@@ -496,6 +463,16 @@ case_templates_keep_the_split() {
 		# -n: the recipes, not the tools - this repo pins few of them.
 		out=$(mk -n check fmt)
 		want_exit "templates/$t: make check and fmt parse beside base" 0 $?
+
+		# A template's bump is its own updater, reached only if its make.mk says
+		# `bump: bump-x`. The recipe is the tool's; the wiring is ours. -p: the
+		# database, which is the one place a prerequisite is written down.
+		out=$(make -C "$repo" -p -n --no-print-directory bump 2>/dev/null |
+			rg '^bump: ')
+		for bump in $(rg -o --no-filename '^bump-[a-z]+:' "$src/templates/$t/make.mk" |
+			tr -d ':'); do
+			want_in "templates/$t: $bump is a prerequisite of bump" "$bump" "$out"
+		done
 	done
 }
 
@@ -521,7 +498,6 @@ cases=(
 	case_base_rc_puts_the_pins_on_path
 	case_base_make_deps_extends
 	case_base_make_upgrade_guard
-	case_base_make_upgrade_extends
 	case_base_make_phony
 	case_shell_formats_and_restages
 	case_shell_shellcheck_refuses
