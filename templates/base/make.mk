@@ -15,11 +15,13 @@ export PATH = $(shell mise bin-paths | sed 's/$$/:/' | tr -d '\n')$(orig_path)
 
 ##@ Tools and hooks
 
-# Double-colon: a repo appends its own `deps::`, with no `##` - deps twice.
+# Double-colon: a repo appends its own `deps::`, without `##` or help lists it
+# twice. Plain `deps:` is a make error.
 deps:: ## install the pinned tools
 	mise install
 
-# Hooks do not travel with the tree; mise exec, since make deps may not have run.
+# Hooks do not travel with the tree. mise exec installs lefthook if make deps
+# has not run.
 hooks: ## install lefthook's hooks for this clone
 	@git config --unset core.hooksPath || true
 	mise exec -- lefthook install
@@ -46,8 +48,8 @@ upgrade: bump fmt check ## bump every pin and dependency, then format and check
 
 bump: upgrade-guard bump-mise
 
-# --bump: a pin is exact. --local: not the global config's. prune: nothing uses
-# the version it replaced now.
+# --bump: a pin is exact. --local: not the global config's. prune is global:
+# every version no tracked config pins goes, not after prune_after's grace.
 bump-mise:
 	mise upgrade --bump --local
 	mise prune -y -q
