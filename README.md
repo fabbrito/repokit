@@ -132,11 +132,14 @@ dodges the cooldown, so it is not in the lane.
 
 `.config/commitlint.config.mjs` extends `@commitlint/config-conventional`, which the CLI bundles: no
 `package.json`. Its top is the repo's policy — `scope-enum` (fixed names plus `dirs('<root>')`, a
-scope per directory), `type-enum`, the limits — then the one local rule:
+scope per directory, or `dirs('.', /^\d{4}$/)` for the ones a pattern picks out), `type-enum`, the
+limits — then the two local rules:
 
 - **`body-bullets`** — one blank line under the subject, then `- ` bullets and nothing else, back to
   back, one line each, at most its option (default 2). A trailer block may close the message, one
   blank line before it allowed: what git itself writes.
+- **`scope-not-empty`** — `feat(): x` is refused. The parser reads empty parens as no scope at all,
+  so `scope-enum` never sees it; the header still shows them.
 
 Every rule is an error or off: the hook runs `--strict`, which fails a warning too. Exit `0` ok, `3`
 rejected, `1` commitlint itself failed (a broken config), `9` the config is missing.

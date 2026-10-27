@@ -161,6 +161,12 @@ run_commit_msg_output() {
 	want_in 'commit-msg/a stray trailer says where trailers go' \
 		'one block at the end' "$out"
 
+	# A scope that is there and empty: config-conventional has no rule for it.
+	out=$(grade bad-empty-scope)
+	want_in 'commit-msg/an empty scope is named' 'empty scope' "$out"
+	want_in 'commit-msg/an empty scope says what to write' \
+		'write: drop the parens' "$out"
+
 	# A rebase replays messages it did not author.
 	mkdir -p "$fixture_repo/.git/rebase-merge"
 	grade bad-shape >/dev/null 2>&1
