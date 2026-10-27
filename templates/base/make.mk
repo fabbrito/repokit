@@ -11,7 +11,12 @@ SHELL := /bin/bash
 ifeq ($(shell command -v mise),)
 $(error mise not on PATH - https://mise.jdx.dev, then make deps)
 endif
-export PATH := $(shell mise bin-paths | paste -sd: -):$(PATH)
+# Recursive, not `:=`: make expands it once per recipe, so a target reads the
+# pins as they are when it starts - `fmt` and `check` after a bump get the
+# versions it installed, where parse-time pins would be the run's first. ~11 ms
+# a recipe.
+orig_path := $(PATH)
+export PATH = $(shell mise bin-paths | paste -sd: -):$(orig_path)
 
 .PHONY: deps hooks
 
@@ -59,8 +64,11 @@ bump: upgrade-guard bump-mise
 
 # --bump: the pins are exact, so nothing moves without it. --local: this repo's
 # tools, never the global config's. The age is mise.toml's minimum_release_age.
+# prune: the version just replaced is used by nothing, so it goes now rather
+# than after upgrade.prune_after's grace period.
 bump-mise:
 	mise upgrade --bump --local
+	mise prune -y -q
 
 # A bump is a commit's worth of diff nobody has read yet: start clean, so the
 # diff is only the bumps. Untracked files are in no diff. A red `check` leaves

@@ -116,7 +116,9 @@ the order is the order the files are included: base's, then each template's, the
 
 `--bump` because a pin is exact: nothing moves without it. `--local` because the global config's
 tools are not this repo's. A major release is held either way - mise keeps the pin's precision,
-`cargo update` stays inside the requirement - so widening one is a decision made by hand.
+`cargo update` stays inside the requirement - so widening one is a decision made by hand. PATH is
+read per recipe, so `fmt` and `check` run the versions the bump just installed, and
+`make deps check` in one invocation works.
 
 **A day of cooling, one place per tool.** A release younger than a day is held, not taken: `base`'s
 `minimum_release_age` for mise, `--minimum-dependency-age P1D` for dprint, `cooldown.toml` for
