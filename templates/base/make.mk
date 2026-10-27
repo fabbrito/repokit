@@ -45,12 +45,6 @@ check:: ## every lane over the whole tree, read only
 fmt:: ## the same lanes, writing - never stages
 	@:
 
-# tree_files,<pathspec>: the hooks' file set over the whole tree - tracked and
-# untracked, ignored out, symlinks and deleted paths skipped. Words, not
-# lines: a path with a space splits.
-tree_files = $(shell git ls-files -co --exclude-standard -- $(1) | \
-	while IFS= read -r f; do [[ -L $$f || ! -e $$f ]] || echo "$$f"; done)
-
 ##@ Upgrade
 
 # A bump is one tool's own updater, appended as a prerequisite of `bump`:

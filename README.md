@@ -67,8 +67,7 @@ A target documented with `## text` is a command: declare it `.PHONY`, or a direc
 makes it "up to date". `make-phony` refuses one that is not, in the hook and in `make check`.
 
 `check` and `fmt` extend the same way: each template's `make.mk` appends its lanes, and so does a
-repo's own. `$(call tree_files,'<pathspec>')` is base's whole-tree file set for a lane that takes
-paths.
+repo's own. A lane that takes paths builds its own file list — `shell.mk`'s is the model.
 
 Moving from the `check`/`fix` lefthook groups: delete the Makefile's own `check:` / `fmt:` — a
 single-colon rule beside base's `check::` is a make error — and `include` each `.config/make/<t>.mk`
