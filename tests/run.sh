@@ -82,19 +82,6 @@ want_not_in() {
 	return 1
 }
 
-# want_order <name> <first> <then> <output>: first must come before then, and
-# both must be there - a line that is absent is not ordered early.
-want_order() {
-	local name=$1 first=$2 then=$3 haystack=$4 rest
-	rest=${haystack#*"$first"}
-	if [[ $haystack == *"$first"* && $rest == *"$then"* ]]; then
-		ok "$name"
-		return 0
-	fi
-	no "$name" "want: $first, then $then" "output: $haystack"
-	return 1
-}
-
 # ------------------------------------------------------------- commit-msg
 
 # Grading is text in, exit code out - but the rebase check asks git, so it
@@ -314,24 +301,29 @@ case_base_make_deps_extends() {
 	want_not_in 'base/hooks installs no tools' 'mise install' "$out"
 }
 
-# A template's bump is a prerequisite of `bump`, so the order is include
-# order: guard, base's pins, each template's, then the repo's own - and fmt and
-# check only after all of them. -n: nothing runs.
-case_base_make_upgrade_extends() {
+# `bump`'s first prerequisite. Only tracked dirt stops it - an untracked file is
+# in no diff - and split over two lines the guard was a syntax error.
+case_base_make_upgrade_guard() {
 	local out
-	mkconsumer dprint rust || return
-	printf 'bump: bump-repo\n\nbump-repo:\n\techo repo-bump\n' >>"$repo/Makefile"
+	mkconsumer || return
 
-	out=$(mk -n upgrade)
-	want_exit 'base/upgrade holds a repo with its own bumps' 0 "$?"
-	want_order 'upgrade: the guard runs first' \
-		'git status --porcelain' 'mise upgrade' "$out"
-	want_order 'upgrade: pins, then dprint, rust, the repo' \
-		'mise upgrade' 'repo-bump' "$out"
-	want_order 'upgrade/dprint before rust' \
-		'dprint config update' 'cargo cooldown update' "$out"
-	want_order 'upgrade: fmt after the last bump' 'repo-bump' 'dprint fmt' "$out"
-	want_order 'upgrade: check after fmt' 'dprint fmt' 'dprint check' "$out"
+	mk upgrade-guard >/dev/null
+	want_exit 'base/the guard passes a clean tree' 0 $?
+
+	printf 'x\n' >"$repo/new"
+	mk upgrade-guard >/dev/null
+	want_exit 'base/an untracked file is no diff' 0 $?
+
+	git -C "$repo" add new
+	out=$(mk upgrade-guard)
+	want_exit 'base/a staged file stops the guard' 2 $?
+	want_in 'base/the guard says what to do' \
+		'the tree is dirty; commit first' "$out"
+
+	git -C "$repo" reset -q
+	printf '\n' >>"$repo/Makefile"
+	mk upgrade-guard >/dev/null
+	want_exit 'base/an unstaged edit stops the guard' 2 $?
 }
 
 # shell's policy: a formatter writes on commit and re-stages.
@@ -398,32 +390,32 @@ case_shell_fmt_never_stages() {
 		"$(git -C "$repo" diff --cached --name-only | wc -l)"
 }
 
-# No shell file: no lane runs - shfmt handed nothing would read stdin.
+# No shell file: no lane runs - shellcheck handed nothing fails.
 case_shell_check_without_files() {
 	mkconsumer shell || return
 	mk check >/dev/null
 	want_exit 'shell/check with no shell file passes' 0 $?
 }
 
-# A tracked file deleted from the tree never reaches a lane: shfmt handed a
-# missing path fails the whole check.
-case_shell_check_skips_deleted() {
-	mkconsumer shell || return
-	printf 'x=1\n' >"$repo/gone.sh"
-	git -C "$repo" add gone.sh
-	LEFTHOOK=0 git -C "$repo" commit -qm 'feat: gone' || return
-	rm "$repo/gone.sh"
-	mk check >/dev/null
-	want_exit 'shell/check skips a deleted file' 0 $?
-}
-
-# A symlink never reaches a lane, in make as in the hooks.
+# A symlink never reaches a lane, in make as in the hooks: a dangling one
+# would fail shellcheck for the wrong reason.
 case_shell_check_skips_symlinks() {
 	mkconsumer shell || return
 	printf 'x=1\n' >"$repo/target"
 	ln -s target "$repo/link.sh"
+	ln -s nowhere "$repo/dangling.sh"
 	mk check >/dev/null
 	want_exit 'shell/check skips a symlink' 0 $?
+}
+
+# A vendored tree is out by `.editorconfig`, for both tools.
+case_shell_check_honours_editorconfig() {
+	mkconsumer shell || return
+	mkdir -p "$repo/vendor"
+	printf 'x=1\n' >"$repo/vendor/a.sh"
+	printf '[vendor/**]\nignore = true\n' >"$repo/.editorconfig"
+	mk check >/dev/null
+	want_exit 'shell/check skips what .editorconfig ignores' 0 $?
 }
 
 # The split every template promises, read off lefthook's merged config rather
@@ -436,7 +428,7 @@ case_shell_check_skips_symlinks() {
 #   - pre-commit is the only lefthook hook besides commit-msg: the whole tree
 #     is make.mk's, which parses with only base beside it
 case_templates_keep_the_split() {
-	local t json bad out
+	local t json bad out prereqs line bump bump_re='^(bump-[a-z0-9-]+):'
 	for t in "$src"/templates/*/; do
 		t=${t%/}
 		t=${t##*/}
@@ -470,6 +462,18 @@ case_templates_keep_the_split() {
 		# -n: the recipes, not the tools - this repo pins few of them.
 		out=$(mk -n check fmt)
 		want_exit "templates/$t: make check and fmt parse beside base" 0 $?
+
+		# `bump: bump-x` is the wiring: make's database, read like make-phony's.
+		prereqs=''
+		while IFS= read -r line; do
+			[[ $line == 'bump: '* ]] && prereqs="$line "
+		done < <(mk -pRrq :)
+		while IFS= read -r line; do
+			[[ $line =~ $bump_re ]] || continue
+			bump=${BASH_REMATCH[1]}
+			want_in "templates/$t: $bump is a prerequisite of bump" \
+				" $bump " "$prereqs"
+		done <"$src/templates/$t/make.mk"
 	done
 }
 
@@ -494,7 +498,7 @@ cases=(
 	case_base_rc_refuses_without_mise
 	case_base_rc_puts_the_pins_on_path
 	case_base_make_deps_extends
-	case_base_make_upgrade_extends
+	case_base_make_upgrade_guard
 	case_base_make_phony
 	case_shell_formats_and_restages
 	case_shell_shellcheck_refuses
@@ -504,7 +508,7 @@ cases=(
 	case_shell_fmt_never_stages
 	case_shell_check_without_files
 	case_shell_check_skips_symlinks
-	case_shell_check_skips_deleted
+	case_shell_check_honours_editorconfig
 	case_templates_keep_the_split
 )
 

@@ -19,13 +19,13 @@ $ git commit -F msg
 
 Needs mise. Copy `base`, then whichever others the repo needs, each file to where its header says:
 
-| Template | mise                       | lefthook                                        | `make upgrade`       | Also                                                                                                               |
-| -------- | -------------------------- | ----------------------------------------------- | -------------------- | ------------------------------------------------------------------------------------------------------------------ |
-| `base`   | lefthook, node, commitlint | `commitlint`, `lefthook validate`, `make-phony` | mise's pins          | `commitlint.config.mjs`, `lefthook-rc.sh`, `make-phony.sh`, `make.mk` (`deps`, `hooks`, `check`, `fmt`, `upgrade`) |
-| `shell`  | shfmt, shellcheck          | shfmt, shellcheck                               | —                    | flags in `.shellcheckrc`                                                                                           |
-| `dprint` | dprint                     | dprint: md, json, toml, yaml                    | the plugins          | a starter `dprint.json`                                                                                            |
-| `rust`   | cargo-cooldown             | cargo fmt, cargo check                          | `Cargo.lock`, cooled | `cooldown.toml`; Rust itself by `rust-toolchain.toml`                                                              |
-| `ts`     | bun                        | oxfmt, oxlint, typecheck                        | —                    | tools pinned by `bun.lock`                                                                                         |
+| Template | mise                       | lefthook                                        | `make upgrade`                      | Also                                                                                                               |
+| -------- | -------------------------- | ----------------------------------------------- | ----------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| `base`   | lefthook, node, commitlint | `commitlint`, `lefthook validate`, `make-phony` | mise's pins                         | `commitlint.config.mjs`, `lefthook-rc.sh`, `make-phony.sh`, `make.mk` (`deps`, `hooks`, `check`, `fmt`, `upgrade`) |
+| `shell`  | shfmt, shellcheck          | shfmt, shellcheck                               | —                                   | flags in `.shellcheckrc`                                                                                           |
+| `dprint` | dprint                     | dprint: md, json, toml, yaml                    | the plugins                         | a starter `dprint.json`                                                                                            |
+| `rust`   | cargo-cooldown             | cargo fmt, cargo check                          | `Cargo.lock`, cooled                | `cooldown.toml`; Rust itself by `rust-toolchain.toml`                                                              |
+| `ts`     | bun                        | oxfmt, oxlint, typecheck                        | `bun.lock` + `package.json`, cooled | tools pinned by `bun.lock`; a starter `bunfig.toml`                                                                |
 
 ```
 templates/<t>/mise.toml     → .config/mise/conf.d/<t>.toml
@@ -35,6 +35,7 @@ templates/base/lefthook-rc.sh → .config/lefthook-rc.sh
 templates/base/make-phony.sh → .config/make-phony.sh
 templates/base/commitlint.config.mjs → .config/commitlint.config.mjs
 templates/rust/cooldown.toml → cooldown.toml     (the repo root)
+templates/ts/bunfig.toml → bunfig.toml         (the repo root)
 ```
 
 Then:
@@ -67,8 +68,7 @@ A target documented with `## text` is a command: declare it `.PHONY`, or a direc
 makes it "up to date". `make-phony` refuses one that is not, in the hook and in `make check`.
 
 `check` and `fmt` extend the same way: each template's `make.mk` appends its lanes, and so does a
-repo's own. `$(call tree_files,'<pathspec>')` is base's whole-tree file set for a lane that takes
-paths.
+repo's own. A lane that takes paths walks the tree itself — `shell.mk`'s is the model.
 
 Moving from the `check`/`fix` lefthook groups: delete the Makefile's own `check:` / `fmt:` — a
 single-colon rule beside base's `check::` is a make error — and `include` each `.config/make/<t>.mk`
@@ -80,11 +80,11 @@ Two scopes, same tools. lefthook is the git hooks only; the whole tree is make's
 not `lefthook run`. A new lane goes in both: a template's `lefthook.yml` and its `make.mk`, a repo's
 own `lefthook.yml` and Makefile.
 
-| Where               | Files                                           | Formatters                          | Linters |
-| ------------------- | ----------------------------------------------- | ----------------------------------- | ------- |
-| `pre-commit` (hook) | the staged set                                  | write, and re-stage (`stage_fixed`) | check   |
-| `make check`        | the whole tree, untracked included, ignored out | check                               | check   |
-| `make fmt`          | same as `check`                                 | write, never stage                  | —       |
+| Where               | Files           | Formatters                          | Linters |
+| ------------------- | --------------- | ----------------------------------- | ------- |
+| `pre-commit` (hook) | the staged set  | write, and re-stage (`stage_fixed`) | check   |
+| `make check`        | the whole tree  | check                               | check   |
+| `make fmt`          | same as `check` | write, never stage                  | —       |
 
 - **Pinned or nothing.** Git hooks never see `mise activate`. The `rc:` guard in `base` puts mise's
   tools on `PATH` before lefthook runs, and fails the hook when mise is missing — a hook that falls
@@ -93,11 +93,19 @@ own `lefthook.yml` and Makefile.
 - A whole-tree formatter — after its config changed, `cargo fmt --all` — checks on commit, never
   writes: `stage_fixed` re-stages staged paths only.
 - Every job handed paths skips symlinks: a formatter handed one fails for the wrong reason.
+- A lane that takes paths walks: shfmt over `.`, shellcheck over `shfmt -f .`. Untracked files are
+  in the whole tree, and so are vendored ones — a tool's own config excludes those, never
+  `.gitignore`: `.editorconfig`'s `[vendor/**] ignore = true` for both shell tools.
 - Partially staged files are safe: lefthook hides the unstaged half while jobs run.
 - `LEFTHOOK=0` skips every hook. `lefthook run commit-msg <file>` grades a message by hand.
 - In a recipe, the tool's plain name: `base.mk` already put mise's paths first. `mise exec` appends
   them, so a tool already on `PATH` wins over the pin - it is for a shell, or a recipe that runs
   before `make deps` has installed anything.
+
+**A lane defined once.** A repo whose agent cannot run make - the harness only knows `package.json`
+scripts, say - keeps its lanes in that runner and has `make check` and `make fmt` delegate to it:
+one definition, two entries. What moves is the command, not the split: the hooks still call
+lefthook, and `make check` still reads the whole tree.
 
 ## Upgrade
 
@@ -113,20 +121,25 @@ the order is the order the files are included: base's, then each template's, the
 | `base`   | mise's pins, `mise upgrade --bump --local`           |
 | `dprint` | the plugins in `dprint.json`, `dprint config update` |
 | `rust`   | `Cargo.lock`, through `cargo cooldown update`        |
-| `ts`     | — (its tools are `bun.lock`'s)                       |
+| `ts`     | `bun.lock` and `package.json`, `bun update`          |
 
 `--bump` because a pin is exact: nothing moves without it. `--local` because the global config's
 tools are not this repo's. A major release is held either way - mise keeps the pin's precision,
-`cargo update` stays inside the requirement - so widening one is a decision made by hand.
+`cargo update` stays inside the requirement - so widening one is a decision made by hand. PATH is
+read per recipe, so `fmt` and `check` run the versions the bump just installed, and
+`make deps check` in one invocation works.
 
 **A day of cooling, one place per tool.** A release younger than a day is held, not taken: `base`'s
-`minimum_release_age` for mise, `--minimum-dependency-age P1D` for dprint, `cooldown.toml` for
-cargo - which has no cooldown of its own until `min-publish-age` leaves nightly, so `rust`'s
-`mise.toml` pins `cargo-cooldown` to apply it.
+`minimum_release_age` for mise, `install.minimumReleaseAge` in `bunfig.toml` for bun,
+`--minimum-dependency-age P1D` for dprint, `cooldown.toml` for cargo - which has no cooldown of its
+own until `min-publish-age` leaves nightly, so `rust`'s `mise.toml` pins `cargo-cooldown` to apply
+it.
 
 `Cargo.toml` keeps its floors and the lock is what moves: `cargo update` never rewrites a manifest.
 `cargo upgrade` would move the floor too, and it picks by version rather than by publish date - it
-dodges the cooldown, so it is not in the lane.
+dodges the cooldown, so it is not in the lane. bun is the other way round: `bun update` moves the
+floors inside the range the manifest already declares, and `--latest` - which rewrites the range -
+is the one left by hand.
 
 ## Message rules
 

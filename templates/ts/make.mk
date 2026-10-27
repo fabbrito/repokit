@@ -8,3 +8,12 @@ check::
 
 fmt::
 	bun oxfmt
+
+# The lock moves and package.json's floors with it, inside the declared range:
+# --latest rewrites them, a decision by hand. The day is bunfig.toml's.
+.PHONY: bump-bun
+
+bump: bump-bun
+
+bump-bun:
+	bun update
