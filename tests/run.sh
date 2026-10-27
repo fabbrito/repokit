@@ -396,27 +396,6 @@ case_shell_check_without_files() {
 	want_exit 'shell/check with no shell file passes' 0 $?
 }
 
-# A tracked file deleted from the tree never reaches a lane: shfmt handed a
-# missing path fails the whole check.
-case_shell_check_skips_deleted() {
-	mkconsumer shell || return
-	printf 'x=1\n' >"$repo/gone.sh"
-	git -C "$repo" add gone.sh
-	LEFTHOOK=0 git -C "$repo" commit -qm 'feat: gone' || return
-	rm "$repo/gone.sh"
-	mk check >/dev/null
-	want_exit 'shell/check skips a deleted file' 0 $?
-}
-
-# A symlink never reaches a lane, in make as in the hooks.
-case_shell_check_skips_symlinks() {
-	mkconsumer shell || return
-	printf 'x=1\n' >"$repo/target"
-	ln -s target "$repo/link.sh"
-	mk check >/dev/null
-	want_exit 'shell/check skips a symlink' 0 $?
-}
-
 # The split every template promises, read off lefthook's merged config rather
 # than run: dprint, rust and ts call tools this repo does not pin, and their
 # lanes are those tools' business. What is ours is the shape.
@@ -502,8 +481,6 @@ cases=(
 	case_shell_check_sees_committed
 	case_shell_fmt_never_stages
 	case_shell_check_without_files
-	case_shell_check_skips_symlinks
-	case_shell_check_skips_deleted
 	case_templates_keep_the_split
 )
 

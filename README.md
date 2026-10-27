@@ -68,7 +68,7 @@ A target documented with `## text` is a command: declare it `.PHONY`, or a direc
 makes it "up to date". `make-phony` refuses one that is not, in the hook and in `make check`.
 
 `check` and `fmt` extend the same way: each template's `make.mk` appends its lanes, and so does a
-repo's own. A lane that takes paths builds its own file list — `shell.mk`'s is the model.
+repo's own. A lane that takes paths walks the tree itself — `shell.mk`'s is the model.
 
 Moving from the `check`/`fix` lefthook groups: delete the Makefile's own `check:` / `fmt:` — a
 single-colon rule beside base's `check::` is a make error — and `include` each `.config/make/<t>.mk`
@@ -80,11 +80,11 @@ Two scopes, same tools. lefthook is the git hooks only; the whole tree is make's
 not `lefthook run`. A new lane goes in both: a template's `lefthook.yml` and its `make.mk`, a repo's
 own `lefthook.yml` and Makefile.
 
-| Where               | Files                                           | Formatters                          | Linters |
-| ------------------- | ----------------------------------------------- | ----------------------------------- | ------- |
-| `pre-commit` (hook) | the staged set                                  | write, and re-stage (`stage_fixed`) | check   |
-| `make check`        | the whole tree, untracked included, ignored out | check                               | check   |
-| `make fmt`          | same as `check`                                 | write, never stage                  | —       |
+| Where               | Files           | Formatters                          | Linters |
+| ------------------- | --------------- | ----------------------------------- | ------- |
+| `pre-commit` (hook) | the staged set  | write, and re-stage (`stage_fixed`) | check   |
+| `make check`        | the whole tree  | check                               | check   |
+| `make fmt`          | same as `check` | write, never stage                  | —       |
 
 - **Pinned or nothing.** Git hooks never see `mise activate`. The `rc:` guard in `base` puts mise's
   tools on `PATH` before lefthook runs, and fails the hook when mise is missing — a hook that falls
@@ -93,6 +93,9 @@ own `lefthook.yml` and Makefile.
 - A whole-tree formatter — after its config changed, `cargo fmt --all` — checks on commit, never
   writes: `stage_fixed` re-stages staged paths only.
 - Every job handed paths skips symlinks: a formatter handed one fails for the wrong reason.
+- A lane that takes paths walks: shfmt over `.`, shellcheck over bash's globstar. Untracked files
+  are in the whole tree, and so are vendored ones — a tool's own config excludes those, never
+  `.gitignore`.
 - Partially staged files are safe: lefthook hides the unstaged half while jobs run.
 - `LEFTHOOK=0` skips every hook. `lefthook run commit-msg <file>` grades a message by hand.
 - In a recipe, the tool's plain name: `base.mk` already put mise's paths first. `mise exec` appends
