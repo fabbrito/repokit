@@ -4,6 +4,7 @@
 # .PHONY: undeclared, a directory of the same name (build/) makes `make build`
 # "up to date" and runs nothing. make's own database says what is phony: it
 # has read every include.
+set -uo pipefail
 
 root=$(git rev-parse --show-toplevel) || exit
 cd "$root" || exit
@@ -23,7 +24,7 @@ for file in Makefile .config/make/*.mk; do
 	while IFS= read -r line; do
 		[[ $line =~ ^([a-zA-Z_-]+):.*## ]] || continue
 		target=${BASH_REMATCH[1]}
-		[[ -n ${phony[$target]} ]] || missing+=("$file: $target")
+		[[ -v phony[$target] ]] || missing+=("$file: $target")
 	done <"$file"
 done
 
