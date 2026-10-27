@@ -82,6 +82,19 @@ want_not_in() {
 	return 1
 }
 
+# want_order <name> <first> <then> <output>: first must come before then, and
+# both must be there - a line that is absent is not ordered early.
+want_order() {
+	local name=$1 first=$2 then=$3 haystack=$4 rest
+	rest=${haystack#*"$first"}
+	if [[ $haystack == *"$first"* && $rest == *"$then"* ]]; then
+		ok "$name"
+		return 0
+	fi
+	no "$name" "want: $first, then $then" "output: $haystack"
+	return 1
+}
+
 # ------------------------------------------------------------- commit-msg
 
 # Grading is text in, exit code out - but the rebase check asks git, so it
@@ -147,6 +160,12 @@ run_commit_msg_output() {
 	out=$(grade bad-blank-between-trailers)
 	want_in 'commit-msg/a stray trailer says where trailers go' \
 		'one block at the end' "$out"
+
+	# A scope that is there and empty: config-conventional has no rule for it.
+	out=$(grade bad-empty-scope)
+	want_in 'commit-msg/an empty scope is named' 'empty scope' "$out"
+	want_in 'commit-msg/an empty scope says what to write' \
+		'write: drop the parens' "$out"
 
 	# A rebase replays messages it did not author.
 	mkdir -p "$fixture_repo/.git/rebase-merge"
@@ -293,6 +312,26 @@ case_base_make_deps_extends() {
 
 	out=$(make -C "$repo" -n --no-print-directory hooks 2>&1)
 	want_not_in 'base/hooks installs no tools' 'mise install' "$out"
+}
+
+# A template's bump is a prerequisite of `bump`, so the order is include
+# order: guard, base's pins, each template's, then the repo's own - and fmt and
+# check only after all of them. -n: nothing runs.
+case_base_make_upgrade_extends() {
+	local out
+	mkconsumer dprint rust || return
+	printf 'bump: bump-repo\n\nbump-repo:\n\techo repo-bump\n' >>"$repo/Makefile"
+
+	out=$(mk -n upgrade)
+	want_exit 'base/upgrade holds a repo with its own bumps' 0 "$?"
+	want_order 'upgrade: the guard runs first' \
+		'git status --porcelain' 'mise upgrade' "$out"
+	want_order 'upgrade: pins, then dprint, rust, the repo' \
+		'mise upgrade' 'repo-bump' "$out"
+	want_order 'upgrade/dprint before rust' \
+		'dprint config update' 'cargo cooldown update' "$out"
+	want_order 'upgrade: fmt after the last bump' 'repo-bump' 'dprint fmt' "$out"
+	want_order 'upgrade: check after fmt' 'dprint fmt' 'dprint check' "$out"
 }
 
 # shell's policy: a formatter writes on commit and re-stages.
@@ -455,6 +494,7 @@ cases=(
 	case_base_rc_refuses_without_mise
 	case_base_rc_puts_the_pins_on_path
 	case_base_make_deps_extends
+	case_base_make_upgrade_extends
 	case_base_make_phony
 	case_shell_formats_and_restages
 	case_shell_shellcheck_refuses

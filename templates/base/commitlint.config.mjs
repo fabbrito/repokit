@@ -7,11 +7,12 @@ import { execFileSync } from 'node:child_process';
 import { existsSync, readdirSync } from 'node:fs';
 
 // Basenames of the directories under root, relative to the repo root: a
-// scope per package. A missing root is no scopes, not an error.
-export const dirs = (root) => {
+// scope per package. A missing root is no scopes, not an error. With a pattern,
+// only the names it matches: dirs('.', /^\d{4}$/) for year crates.
+export const dirs = (root, pattern) => {
   try {
     return readdirSync(root, { withFileTypes: true })
-      .filter((d) => d.isDirectory())
+      .filter((d) => d.isDirectory() && (!pattern || pattern.test(d.name)))
       .map((d) => d.name);
   } catch {
     return [];
@@ -89,6 +90,14 @@ export const bodyBullets = ({ raw }, _when, max = 2) => {
   return [errs.length === 0, errs.join('\n    ')];
 };
 
+// config-conventional has no rule for `feat(): x`. The parser reads empty
+// parens as no scope at all, so `scope-empty` and `scope-enum` both skip it -
+// the header is where the parens still show.
+export const scopeNotEmpty = ({ header }) => [
+  !/^[A-Za-z]+\(\)/.test(header ?? ''),
+  'empty scope\n  write: drop the parens, or name a scope',
+];
+
 // A rebase replays messages it did not author: failing them would make this
 // hook the reason you cannot rebase.
 const rebasing = () =>
@@ -100,9 +109,10 @@ export default {
   extends: ['@commitlint/config-conventional'],
   helpUrl: 'https://github.com/fabbrito/repokit#message-rules',
   ignores: [rebasing],
-  plugins: [{ rules: { 'body-bullets': bodyBullets } }],
+  plugins: [{ rules: { 'body-bullets': bodyBullets, 'scope-not-empty': scopeNotEmpty } }],
   rules: {
     'scope-enum': [2, 'always', scopes],
+    'scope-not-empty': [2, 'always'],
     'header-max-length': [2, 'always', 72],
     'body-max-line-length': [2, 'always', 80],
     'body-bullets': [2, 'always', 2],

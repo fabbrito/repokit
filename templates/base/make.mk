@@ -3,8 +3,10 @@
 # run. No mise is an error, not a quiet fallback.
 #
 # Bash for every recipe and $(shell) after this line, a repo's own included:
-# first in the Makefile is what makes that every one.
+# first in the Makefile is what makes that every one. Strict as a script:
+# an unset variable or a failed pipe stage fails the recipe.
 SHELL := /bin/bash
+.SHELLFLAGS := -uo pipefail -c
 
 ifeq ($(shell command -v mise),)
 $(error mise not on PATH - https://mise.jdx.dev, then make deps)
@@ -48,3 +50,26 @@ fmt:: ## the same lanes, writing - never stages
 # lines: a path with a space splits.
 tree_files = $(shell git ls-files -co --exclude-standard -- $(1) | \
 	while IFS= read -r f; do [[ -L $$f || ! -e $$f ]] || echo "$$f"; done)
+
+##@ Upgrade
+
+# A bump is one tool's own updater, appended as a prerequisite of `bump`:
+# `bump: bump-dprint`. Prerequisites run in include order - base's guard and
+# pins, then each template's, then the repo's own - and `upgrade` reaches fmt
+# and check only once every bump has run.
+.PHONY: upgrade bump upgrade-guard bump-mise
+
+upgrade: bump fmt check ## bump every pin and dependency, then format and check
+
+bump: upgrade-guard bump-mise
+
+# --bump: the pins are exact, so nothing moves without it. --local: this repo's
+# tools, never the global config's. The age is mise.toml's minimum_release_age.
+bump-mise:
+	mise upgrade --bump --local
+
+# A bump is a commit's worth of diff nobody has read yet: start clean, so the
+# diff is only the bumps. A red `check` leaves it uncommitted to look at.
+upgrade-guard:
+	@test -z "$$(git status --porcelain)" ||
+		{ echo 'upgrade: the tree is dirty; commit first' >&2; exit 1; }
