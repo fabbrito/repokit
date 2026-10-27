@@ -1,2 +1,6 @@
 .tmp/
 lefthook-local.yml
+
+.agents/
+.claude/
+skills-lock.json
