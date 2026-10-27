@@ -50,7 +50,7 @@ done
 
 # A blob URL at the tag, not a raw one: it renders for anyone who can see
 # the repo, private or public, and names the exact bytes this release ships
-# rather than whatever master holds today. No origin - a bare clone - just
+# rather than whatever main holds today. No origin - a bare clone - just
 # means no links.
 slug=$(git remote get-url origin 2>/dev/null)
 if [[ -n $slug ]]; then

@@ -43,15 +43,15 @@ refuse() {
 	return 0
 }
 
-[[ $(git branch --show-current) == master ]] || refuse 'not on master'
+[[ $(git branch --show-current) == main ]] || refuse 'not on main'
 [[ -z $(git status --porcelain) ]] || refuse 'tree not clean'
 if git rev-parse --quiet --verify "refs/tags/$tag" >/dev/null; then
 	refuse "$tag exists - a release is never moved, cut the next patch"
 fi
 if git remote get-url origin >/dev/null 2>&1; then
-	git fetch --quiet origin master || die 'cannot fetch origin'
-	git merge-base --is-ancestor origin/master HEAD ||
-		refuse 'origin/master has commits this branch lacks'
+	git fetch --quiet origin main || die 'cannot fetch origin'
+	git merge-base --is-ancestor origin/main HEAD ||
+		refuse 'origin/main has commits this branch lacks'
 	# A tag absent here may still be on origin: a stale clone, a pruned tag.
 	# `git tag` would not see it, so the release would collide at publish time.
 	git ls-remote --exit-code --tags origin "refs/tags/$tag" >/dev/null

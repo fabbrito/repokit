@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Publish what `make release` tagged: master and the tag to origin, then a
+# Publish what `make release` tagged: main and the tag to origin, then a
 # GitHub release carrying scripts/notes.sh's notes and the grader as a bare
 # asset named commit-msg-lint - what mise's github: backend installs. Then
 # install that asset the way a consumer would and grade with it: the release
@@ -38,7 +38,7 @@ refuse() {
 tag=$(git describe --tags --exact-match HEAD 2>/dev/null) ||
 	die 'HEAD carries no tag - make release first'
 [[ $tag =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || die "$tag is not a release tag"
-[[ $(git branch --show-current) == master ]] || refuse 'not on master'
+[[ $(git branch --show-current) == main ]] || refuse 'not on main'
 [[ -z $(git status --porcelain) ]] || refuse 'tree not clean'
 [[ $(<VERSION) == "$tag" ]] || refuse "VERSION is not stamped $tag"
 grep -q "^VERSION='$tag'\$" bin/commit-msg-lint.sh ||
@@ -54,7 +54,7 @@ notes=$work/notes.md
 scripts/notes.sh "$tag" >"$notes" || die 'notes failed'
 
 if $dry; then
-	printf 'publish: would send master and %s to origin, then:\n' "$tag"
+	printf 'publish: would send main and %s to origin, then:\n' "$tag"
 	printf '  gh release create %s --title "repokit %s" --notes-file - commit-msg-lint\n' \
 		"$tag" "$tag"
 	printf -- '--- notes ---\n'
@@ -63,7 +63,7 @@ if $dry; then
 	exit 0
 fi
 
-git push origin master || die 'cannot push master'
+git push origin main || die 'cannot push main'
 git push origin "$tag" || die 'cannot push the tag'
 # The asset's name is the binary's: mise names a bare download after it.
 mkdir -p "$work/asset" || die 'mkdir failed'
