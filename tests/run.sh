@@ -317,7 +317,8 @@ case_base_make_upgrade_guard() {
 	git -C "$repo" add new
 	out=$(mk upgrade-guard)
 	want_exit 'base/a staged file stops the guard' 2 $?
-	want_in 'base/the guard says what to do' 'the tree is dirty; commit first' "$out"
+	want_in 'base/the guard says what to do' \
+		'the tree is dirty; commit first' "$out"
 
 	git -C "$repo" reset -q
 	printf '\n' >>"$repo/Makefile"
@@ -427,7 +428,7 @@ case_shell_check_honours_editorconfig() {
 #   - pre-commit is the only lefthook hook besides commit-msg: the whole tree
 #     is make.mk's, which parses with only base beside it
 case_templates_keep_the_split() {
-	local t json bad out prereqs line bump_re='^(bump-[a-z0-9-]+):'
+	local t json bad out prereqs line bump bump_re='^(bump-[a-z0-9-]+):'
 	for t in "$src"/templates/*/; do
 		t=${t%/}
 		t=${t##*/}
@@ -462,15 +463,16 @@ case_templates_keep_the_split() {
 		out=$(mk -n check fmt)
 		want_exit "templates/$t: make check and fmt parse beside base" 0 $?
 
-		# `bump: bump-x` is the wiring, read off make's database as make-phony does.
+		# `bump: bump-x` is the wiring: make's database, read like make-phony's.
 		prereqs=''
 		while IFS= read -r line; do
 			[[ $line == 'bump: '* ]] && prereqs="$line "
 		done < <(mk -pRrq :)
 		while IFS= read -r line; do
 			[[ $line =~ $bump_re ]] || continue
-			want_in "templates/$t: ${BASH_REMATCH[1]} is a prerequisite of bump" \
-				" ${BASH_REMATCH[1]} " "$prereqs"
+			bump=${BASH_REMATCH[1]}
+			want_in "templates/$t: $bump is a prerequisite of bump" \
+				" $bump " "$prereqs"
 		done <"$src/templates/$t/make.mk"
 	done
 }

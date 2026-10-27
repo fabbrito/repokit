@@ -17,11 +17,13 @@ while IFS= read -r line; do
 	done
 done < <(make -pRrq -f Makefile : 2>/dev/null)
 
+# A bracket class inline reads as the closing `]]` to some parsers.
+documented='^([a-zA-Z_-]+):.*##'
 missing=()
 for file in Makefile .config/make/*.mk; do
 	[[ -f $file ]] || continue
 	while IFS= read -r line; do
-		[[ $line =~ ^([a-zA-Z_-]+):.*## ]] || continue
+		[[ $line =~ $documented ]] || continue
 		target=${BASH_REMATCH[1]}
 		[[ -v phony[$target] ]] || missing+=("$file: $target")
 	done <"$file"
