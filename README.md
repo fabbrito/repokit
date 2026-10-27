@@ -93,9 +93,9 @@ own `lefthook.yml` and Makefile.
 - A whole-tree formatter — after its config changed, `cargo fmt --all` — checks on commit, never
   writes: `stage_fixed` re-stages staged paths only.
 - Every job handed paths skips symlinks: a formatter handed one fails for the wrong reason.
-- A lane that takes paths walks: shfmt over `.`, shellcheck over bash's globstar. Untracked files
-  are in the whole tree, and so are vendored ones — a tool's own config excludes those, never
-  `.gitignore`.
+- A lane that takes paths walks: shfmt over `.`, shellcheck over `shfmt -f .`. Untracked files are
+  in the whole tree, and so are vendored ones — a tool's own config excludes those, never
+  `.gitignore`: `.editorconfig`'s `[vendor/**] ignore = true` for both shell tools.
 - Partially staged files are safe: lefthook hides the unstaged half while jobs run.
 - `LEFTHOOK=0` skips every hook. `lefthook run commit-msg <file>` grades a message by hand.
 - In a recipe, the tool's plain name: `base.mk` already put mise's paths first. `mise exec` appends

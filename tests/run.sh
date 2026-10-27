@@ -389,11 +389,32 @@ case_shell_fmt_never_stages() {
 		"$(git -C "$repo" diff --cached --name-only | wc -l)"
 }
 
-# No shell file: no lane runs - shfmt handed nothing would read stdin.
+# No shell file: no lane runs - shellcheck handed nothing fails.
 case_shell_check_without_files() {
 	mkconsumer shell || return
 	mk check >/dev/null
 	want_exit 'shell/check with no shell file passes' 0 $?
+}
+
+# A symlink never reaches a lane, in make as in the hooks: a dangling one
+# would fail shellcheck for the wrong reason.
+case_shell_check_skips_symlinks() {
+	mkconsumer shell || return
+	printf 'x=1\n' >"$repo/target"
+	ln -s target "$repo/link.sh"
+	ln -s nowhere "$repo/dangling.sh"
+	mk check >/dev/null
+	want_exit 'shell/check skips a symlink' 0 $?
+}
+
+# A vendored tree is out by `.editorconfig`, for both tools.
+case_shell_check_honours_editorconfig() {
+	mkconsumer shell || return
+	mkdir -p "$repo/vendor"
+	printf 'x=1\n' >"$repo/vendor/a.sh"
+	printf '[vendor/**]\nignore = true\n' >"$repo/.editorconfig"
+	mk check >/dev/null
+	want_exit 'shell/check skips what .editorconfig ignores' 0 $?
 }
 
 # The split every template promises, read off lefthook's merged config rather
@@ -481,6 +502,8 @@ cases=(
 	case_shell_check_sees_committed
 	case_shell_fmt_never_stages
 	case_shell_check_without_files
+	case_shell_check_skips_symlinks
+	case_shell_check_honours_editorconfig
 	case_templates_keep_the_split
 )
 
