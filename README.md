@@ -99,6 +99,11 @@ own `lefthook.yml` and Makefile.
   them, so a tool already on `PATH` wins over the pin - it is for a shell, or a recipe that runs
   before `make deps` has installed anything.
 
+**A lane defined once.** A repo whose agent cannot run make - the harness only knows `package.json`
+scripts, say - keeps its lanes in that runner and has `make check` and `make fmt` delegate to it:
+one definition, two entries. What moves is the command, not the split: the hooks still call
+lefthook, and `make check` still reads the whole tree.
+
 ## Upgrade
 
 `make upgrade` is `bump`, then `fmt` and `check`: nothing is formatted or checked until every bump
